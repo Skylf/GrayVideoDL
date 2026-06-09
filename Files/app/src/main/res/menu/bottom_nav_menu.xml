@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 底部导航栏菜单，包含首页、下载、日志、设置四个 Tab -->
+<!-- 日志 Tab 的可见性由调试日志设置控制 -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_home"
+        android:icon="@drawable/ic_home"
+        android:title="首页" />
+    <item
+        android:id="@+id/nav_download"
+        android:icon="@drawable/ic_download"
+        android:title="下载" />
+    <item
+        android:id="@+id/nav_log"
+        android:icon="@drawable/ic_log"
+        android:title="日志" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@drawable/ic_settings"
+        android:title="设置" />
+</menu>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <!-- 错误卡片 -->
+    <color name="error_border">#FFE57373</color>
+    <color name="error_text">#FFD32F2F</color>
+    <!-- 格式选择 -->
+    <color name="chip_selected_bg">#FFE3F2FD</color>
+    <color name="chip_unselected_bg">#FFF5F5F5</color>
+    <!-- 成功提示 -->
+    <color name="success_green">#FF4CAF50</color>
+    <color name="success_bg">#FFE8F5E9</color>
+    <!-- 画质警告 -->
+    <color name="warning_text">#FFE65100</color>
+</resources>

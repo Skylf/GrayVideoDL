@@ -1,0 +1,43 @@
+# 根目录 .gitignore — GrayVideoDL 项目
+
+## Android / Gradle 构建产物
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.jar
+*.war
+*.ear
+bin/
+gen/
+out/
+/build/
+.gradle/
+local.properties
+
+## IDE 文件
+.idea/
+*.iml
+*.iws
+.DS_Store
+
+## NDK / CMake 产物
+.externalNativeBuild/
+.cxx/
+
+## Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+## 敏感 / 用户数据
+*_cookies.txt
+*_cookies.json
+*.log
+
+## 项目说明文档 (Excel 二进制文件保留)
+# ProjectDescription 下的 xlsx 文件保留不排除

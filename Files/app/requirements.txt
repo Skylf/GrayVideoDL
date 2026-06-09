@@ -1,0 +1,6 @@
+# GrayVideoDL Python 依赖包列表
+# 通过 Chaquopy pip 安装到 Android 应用中
+
+# yt-dlp: 通用视频下载器，支持 1800+ 媒体平台
+# 包含视频信息提取、格式选择、下载等功能
+yt-dlp

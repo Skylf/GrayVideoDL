@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">GrayVideoDL</string>
+    <!-- 首页 -->
+    <string name="tab_home">首页</string>
+    <string name="tab_download">下载</string>
+    <string name="tab_settings">设置</string>
+    <string name="home_subtitle">粘贴视频链接，一键下载</string>
+    <string name="home_url_hint">请输入或粘贴视频链接</string>
+    <string name="btn_parse">解析视频</string>
+    <string name="recent_title">最近解析</string>
+    <string name="empty_history">暂无解析记录\n输入链接开始下载</string>
+    <!-- 下载列表 -->
+    <string name="download_title">下载列表</string>
+    <string name="empty_download">暂无下载任务</string>
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="download_path_label">下载路径</string>
+    <string name="download_path_hint">Download/GrayVideoDL/</string>
+    <string name="merge_label">自动合并音视频</string>
+    <string name="merge_desc">合并后为完整音画同步文件</string>
+    <string name="quality_label">默认画质</string>
+    <string name="version_label">版本</string>
+    <string name="version_value">v1.0.0</string>
+    <!-- 通用提示 -->
+    <string name="toast_input_empty">请先输入视频链接</string>
+    <string name="toast_parsing">正在解析</string>
+</resources>
