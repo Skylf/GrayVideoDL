@@ -7,6 +7,7 @@ package com.example.grayvideodl.ui.settings;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,6 +23,7 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 
 public class SettingsFragment extends Fragment {
 
+    private static final String TAG = "SettingsFrag";
     private static final String PREF_NAME = "grayvideodl_settings";
     private static final String KEY_DEBUG_LOG_ENABLED = "debug_log_enabled";
     private static final String KEY_DEFAULT_QUALITY = "default_quality";
@@ -83,11 +85,14 @@ public class SettingsFragment extends Fragment {
 
         cardBiliLogin.setOnClickListener(v -> {
             if (BilibiliLoginDialog.isLoggedIn(requireContext())) {
+                Log.d(TAG, "点击 B站 卡片：当前已登录，显示退出确认");
                 showLogoutConfirm();
             } else {
+                Log.d(TAG, "点击 B站 卡片：当前未登录，打开登录页面");
                 BilibiliLoginFragment loginFragment =
                         new BilibiliLoginFragment();
                 loginFragment.setCallback((success, msg) -> {
+                    Log.d(TAG, "登录回调：success=" + success + ", msg=" + msg);
                     updateBiliLoginStatus();
                 });
                 loginFragment.show(getParentFragmentManager(),
@@ -98,6 +103,7 @@ public class SettingsFragment extends Fragment {
 
     private void updateBiliLoginStatus() {
         boolean loggedIn = BilibiliLoginDialog.isLoggedIn(requireContext());
+        Log.d(TAG, "updateBiliLoginStatus: isLoggedIn=" + loggedIn);
         if (loggedIn) {
             tvBiliLoginStatus.setText("已登录，已解锁高画质");
             tvBiliLoginStatus.setTextColor(
@@ -116,11 +122,14 @@ public class SettingsFragment extends Fragment {
                 .setTitle("退出登录")
                 .setMessage("确定要退出B站登录吗？退出后高画质格式将被锁定。")
                 .setPositiveButton("退出", (dialog, which) -> {
+                    Log.d(TAG, "退出登录：开始清除登录状态");
+
                     // 1. 清除 SharedPreferences 登录状态（同步写入）
                     sharedPreferences.edit()
                             .putBoolean("bilibili_logged_in", false)
                             .putString("bilibili_raw_cookies", "")
                             .commit();
+                    Log.d(TAG, "退出登录：SharedPreferences 已清除");
 
                     // 2. 直接删除 Cookie 文件（使用已知路径，不依赖 getCookieFilePath 的文件存在检查）
                     //    确保即使文件存在但上次检查失败也能被删除
@@ -129,12 +138,17 @@ public class SettingsFragment extends Fragment {
                             "bilibili_cookies.txt");
                     if (cookieFile.exists()) {
                         cookieFile.delete();
+                        Log.d(TAG, "退出登录：Cookie 文件已删除");
+                    } else {
+                        Log.d(TAG, "退出登录：Cookie 文件不存在，跳过删除");
                     }
 
                     // 3. 清除 WebView 内部 Cookie 缓存（使用回调确保完成）
                     //    防止下次打开登录页时旧的 SESSDATA 导致自动登录
+                    Log.d(TAG, "退出登录：开始清除 WebView Cookie...");
                     android.webkit.CookieManager.getInstance()
-                            .removeAllCookies(() -> {
+                            .removeAllCookies(value -> {
+                                Log.d(TAG, "退出登录：Cookie 清除完成（value=" + value + "），清除 WebView 存储");
                                 // Cookie 清除完成后，再清除 WebView 存储
                                 android.webkit.WebStorage.getInstance()
                                         .deleteAllData();
