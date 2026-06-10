@@ -6,19 +6,15 @@
 
 package com.example.grayvideodl.ui.home;
 
+import android.util.Log;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.app.AlertDialog;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.DocumentsContract;
-import android.provider.MediaStore;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,11 +45,12 @@ import com.google.android.material.textfield.TextInputEditText;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.OutputStream;
 import java.util.List;
 
 public class HomeFragment extends Fragment {
+
+    // 日志标签，用于调试下载流程
+    private static final String TAG = "DownloadFlow";
 
     // ========== 控件声明 ==========
     private TextInputEditText etUrlInput;
@@ -246,19 +243,19 @@ public class HomeFragment extends Fragment {
                 .getSharedPreferences(PREF_NAME, requireContext().MODE_PRIVATE);
         boolean mergeEnabled = prefs.getBoolean(KEY_MERGE_ENABLED, true);
 
-        // 分离视频格式和音频格式
-        List<VideoInfo.Format> videoFormats = new java.util.ArrayList<>();
+        // 聚合视频格式（按画质去重，每种画质只保留一个最佳格式）
+        // yt-dlp 对同一分辨率会返回多种编码（h264/h265/AV1）和纯视频流，
+        // aggregateByQuality 会按 360p/720p/1080p 分组并选最优格式
+        List<VideoInfo.Format> videoFormats = info.aggregateByQuality();
+        // 收集音频格式列表（不合并模式时展示）
         List<VideoInfo.Format> audioFormats = new java.util.ArrayList<>();
-
         for (VideoInfo.Format fmt : info.getFormats()) {
             if (fmt.isAudioOnly()) {
                 audioFormats.add(fmt);
-            } else {
-                videoFormats.add(fmt);
             }
         }
 
-        // 更新统计文本
+        // 更新统计文本（使用去重后的视频格式数量）
         tvFormatCount.setText(videoFormats.size() + " 种画质");
         if (!audioFormats.isEmpty()) {
             tvFormatCount.append(" · " + audioFormats.size() + " 种音质");
@@ -470,9 +467,16 @@ public class HomeFragment extends Fragment {
 
         String labelText;
         if (format.isAudioOnly()) {
+            // 音频格式：显示编码 + 扩展名，如 "mp4a · m4a"
             labelText = format.getAcodec() + " · " + format.getExt();
         } else {
-            labelText = format.getResolutionDisplay();
+            // 视频格式：显示画质 + 格式类型 + 编码方式，如 "1080p · 格式：mp4 · 编码方式：h264"
+            String vcodec = format.getVcodec();
+            // 简化编码名称：avc1 → h264，hevc → h265，av01 → av1
+            String codecSimple = simplifyCodec(vcodec != null ? vcodec : "");
+            labelText = format.getResolutionDisplay()
+                    + " · 格式：" + format.getExt()
+                    + " · 编码方式：" + codecSimple;
         }
         label.setText(labelText);
 
@@ -502,6 +506,32 @@ public class HomeFragment extends Fragment {
 
         card.setOnClickListener(v -> selectFormat(card, format));
         return card;
+    }
+
+    /*
+     * simplifyCodec: 简化视频编码名称，将 yt-dlp 返回的编码标识转为可读形式
+     * avc1.640028 → h264,  hevc → h265,  av01.0.05M.08 → av1
+     * @param vcodec yt-dlp 返回的原始视频编码标识
+     * @return 简化的编码名称
+     */
+    private String simplifyCodec(String vcodec) {
+        if (vcodec == null || vcodec.isEmpty() || "none".equals(vcodec)) {
+            return "";
+        }
+        String lower = vcodec.toLowerCase();
+        if (lower.contains("avc") || lower.contains("h264")) {
+            return "h264";
+        } else if (lower.contains("hev") || lower.contains("h265")) {
+            return "h265";
+        } else if (lower.contains("av01") || lower.contains("av1")) {
+            return "av1";
+        } else if (lower.contains("vp9")) {
+            return "vp9";
+        } else if (lower.contains("vp8")) {
+            return "vp8";
+        }
+        // 其他编码直接返回原始值的前8个字符
+        return vcodec.length() > 8 ? vcodec.substring(0, 8) + "…" : vcodec;
     }
 
     /*
@@ -649,8 +679,9 @@ public class HomeFragment extends Fragment {
     }
 
     /*
-     * startDownload: 执行视频下载
-     * 在后台线程调用 Python yt-dlp 下载
+     * startDownload: 执行视频下载（v2 版本）
+     * 将下载任务添加到下载列表，由 DownloadFragment 统一管理下载执行和进度回调。
+     * 不再在此处直接执行下载，而是创建任务后导航到下载 Tab。
      */
     private void startDownload(VideoInfo.Format format) {
         // 创建下载任务记录
@@ -659,140 +690,40 @@ public class HomeFragment extends Fragment {
         task.setTitle(currentVideoInfo.getTitle());
         task.setFormatId(format.getFormatId());
         task.setResolution(format.getResolutionDisplay());
+        // 设置下载目录路径（用于在下载列表中显示和打开文件夹）
+        task.setDownloadDir(getDownloadDirectory(requireContext()).getAbsolutePath());
 
-        setButtonsEnabled(false);
-        showLoadingDialog("正在下载...");
+        Log.d(TAG, "startDownload: 创建下载任务 id=" + task.getId()
+                + ", title=" + task.getTitle()
+                + ", formatId=" + task.getFormatId()
+                + ", status=" + task.getStatus());
 
-        // 读取用户设置的下载路径
-        // 使用 SharedPreferences 中保存的路径
-        final File downloadDir = getDownloadDirectory();
+        // 保存下载任务列表（将新任务添加到头部）
+        List<DownloadTask> tasks = DownloadTask
+                .loadTaskList(requireContext());
+        Log.d(TAG, "startDownload: 从JSON加载已有任务 " + tasks.size() + " 个");
+        tasks.add(0, task);
+        DownloadTask.saveTaskList(requireContext(), tasks);
+        Log.d(TAG, "startDownload: 任务已保存到JSON，总任务数=" + tasks.size());
+        appendLog("下载任务已添加: " + task.getTitle());
 
-        new Thread(() -> {
-            // 获取 Cookie 文件路径
-            String cookieFile = BilibiliLoginDialog
-                    .getCookieFilePath(requireContext());
-
-            // 调用 Python 下载
-            String resultStr = callDownloadFunction(
-                    task.getUrl(), task.getFormatId(),
-                    downloadDir.getAbsolutePath(), cookieFile);
-
-            mainHandler.post(() -> {
-                setButtonsEnabled(true);
-                dismissLoadingDialog();
-
-                try {
-                    JSONObject result = new JSONObject(resultStr);
-                    if ("ok".equals(result.optString("status"))) {
-                        task.setFilepath(result.optString("filepath", ""));
-                        task.setStatus(DownloadTask.STATUS_COMPLETED);
-
-                        // 获取文件大小
-                        File file = new File(task.getFilepath());
-                        if (file.exists()) {
-                            task.setFileSize(file.length());
-                        }
-
-                        appendLog("下载完成: " + task.getFilepath());
-
-                        // 复制到公共 Download 目录（文件管理器中可见）
-                        copyToPublicDownloads(new File(task.getFilepath()));
-
-                        // 显示成功提示
-                        showToast("下载完成: " + result.optString("title", ""));
-                    } else {
-                        task.setStatus(DownloadTask.STATUS_FAILED);
-                        task.setError(result.optString("error", "未知错误"));
-                        appendLog("下载失败: " + task.getError());
-                        showToast("下载失败");
-                    }
-                } catch (Exception e) {
-                    task.setStatus(DownloadTask.STATUS_FAILED);
-                    task.setError(e.getMessage());
-                    appendLog("下载失败: " + e.getMessage());
-                }
-
-                // 保存下载任务列表
-                List<DownloadTask> tasks = DownloadTask
-                        .loadTaskList(requireContext());
-                tasks.add(0, task);
-                DownloadTask.saveTaskList(requireContext(), tasks);
-            });
-        }).start();
-    }
-
-    /*
-     * getDownloadDirectory: 获取下载目录（Python yt-dlp 写入位置）
-     * 使用应用专属目录确保始终可写，下载完成后再复制到公共目录
-     */
-    private File getDownloadDirectory() {
-        File dir = new File(requireContext()
-                .getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                "GrayVideoDL");
-        if (!dir.exists()) dir.mkdirs();
-        return dir;
-    }
-
-    /*
-     * copyToPublicDownloads: 将下载的文件保存到公共 Download/GrayVideoDL/ 目录
-     * 使用 MediaStore API，文件在文件管理器 → Download → GrayVideoDL/ 中可见
-     */
-    private void copyToPublicDownloads(File sourceFile) {
-        try {
-            String fileName = sourceFile.getName();
-            String mimeType = "video/mp4";
-            if (fileName.endsWith(".m4a") || fileName.endsWith(".mp3")
-                    || fileName.endsWith(".aac")) {
-                mimeType = "audio/mpeg";
+        // 通过 MainActivity 切换到下载 Tab，让 DownloadFragment 接管下载
+        if (getActivity() != null) {
+            com.google.android.material.bottomnavigation
+                    .BottomNavigationView nav = getActivity()
+                    .findViewById(R.id.bottom_navigation);
+            if (nav != null) {
+                Log.d(TAG, "startDownload: 即将切换到下载Tab");
+                nav.setSelectedItemId(R.id.nav_download);
+                Log.d(TAG, "startDownload: 已触发切换到下载Tab");
+            } else {
+                Log.w(TAG, "startDownload: bottom_navigation 为 null");
             }
-
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
-            values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
-            values.put(MediaStore.Downloads.RELATIVE_PATH,
-                    "Download/GrayVideoDL");
-            values.put(MediaStore.Downloads.IS_PENDING, 1);
-
-            Uri uri = requireContext().getContentResolver()
-                    .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-            if (uri != null) {
-                try (OutputStream out = requireContext().getContentResolver()
-                        .openOutputStream(uri);
-                     FileInputStream in = new FileInputStream(sourceFile)) {
-                    byte[] buf = new byte[8192];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                }
-                values.clear();
-                values.put(MediaStore.Downloads.IS_PENDING, 0);
-                requireContext().getContentResolver().update(uri, values,
-                        null, null);
-                appendLog("文件已保存到: Download/GrayVideoDL/" + fileName);
-            }
-        } catch (Exception e) {
-            appendLog("保存文件失败: " + e.getMessage());
+        } else {
+            Log.w(TAG, "startDownload: getActivity() 为 null");
         }
-    }
 
-    /*
-     * callDownloadFunction: 调用 Python 下载函数
-     */
-    private String callDownloadFunction(String url, String formatId,
-                                         String outputDir, String cookies) {
-        try {
-            if (!Python.isStarted()) {
-                Python.start(new AndroidPlatform(requireContext()));
-            }
-            Python py = Python.getInstance();
-            PyObject mod = py.getModule("ytdlp_bridge");
-            PyObject result = mod.callAttr(
-                    "downloadVideo", url, formatId, outputDir, cookies);
-            return result.toString();
-        } catch (Exception e) {
-            return "{\"status\":\"error\",\"error\":\"" + e.getMessage() + "\"}";
-        }
+        showToast("下载任务已添加到列表");
     }
 
     /*
@@ -896,6 +827,17 @@ public class HomeFragment extends Fragment {
             loadingDialog.dismiss();
             loadingDialog = null;
         }
+    }
+
+    /*
+     * getDownloadDirectory: 获取下载文件保存目录
+     */
+    private File getDownloadDirectory(Context context) {
+        File dir = new File(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                "GrayVideoDL");
+        if (!dir.exists()) dir.mkdirs();
+        return dir;
     }
 
     private void showToast(String msg) {

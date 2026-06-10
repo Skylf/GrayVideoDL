@@ -217,6 +217,70 @@ public class VideoInfo {
     }
 
     /*
+     * aggregateByQuality: 按画质聚合格式列表，每种画质只保留一个最佳格式
+     * yt-dlp 对同一分辨率会返回多种编码格式（h264/h265/AV1）和不含音频的纯视频流，
+     * 该方法按画质分组去重：
+     *   1. 跳过纯音频格式
+     *   2. 同一画质下优先选择非锁定、合并格式（含音频）、最佳编码、文件最大的格式
+     * @return 去重后的视频格式列表
+     */
+    public List<Format> aggregateByQuality() {
+        // 使用 LinkedHashMap 保持插入顺序，键为画质名称（如 "360p""720p""1080p"）
+        java.util.LinkedHashMap<String, Format> bestByQuality =
+                new java.util.LinkedHashMap<>();
+
+        for (Format fmt : formats) {
+            // 跳过纯音频格式（acodec != none 但 vcodec == none）
+            if (fmt.isAudioOnly()) continue;
+
+            // 获取画质键值（如 "360p""720p""1080p"），去除锁定标记
+            // resolutionToQuality 为 Format 类的静态方法，需通过类名调用
+            String qualityKey = Format.resolutionToQuality(fmt.getResolution());
+
+            Format existing = bestByQuality.get(qualityKey);
+            if (existing == null) {
+                // 该画质尚无代表格式，直接放入
+                bestByQuality.put(qualityKey, fmt);
+            } else {
+                // 已有代表格式，比较并保留更优的一个
+                Format better = pickBetterFormat(existing, fmt);
+                bestByQuality.put(qualityKey, better);
+            }
+        }
+
+        return new ArrayList<>(bestByQuality.values());
+    }
+
+    /*
+     * pickBetterFormat: 比较两个同画质的格式，返回更优的一个
+     * 优先级规则（编号越小优先级越高）：
+     *   1. 非锁定格式 > 锁定格式，
+     *   2. 合并格式（同时含音视频）> 纯视频格式（acodec=none）
+     *   3. 文件大小大的 > 文件大小小的（码率更高）
+     * @param a 格式A
+     * @param b 格式B
+     * @return 更优的格式
+     */
+    private static Format pickBetterFormat(Format a, Format b) {
+        // 规则1：非锁定优于锁定
+        if (a.isLocked() && !b.isLocked()) return b;
+        if (!a.isLocked() && b.isLocked()) return a;
+
+        // 规则2：合并格式优于纯视频格式（acodec != "none" 表示含音频）
+        boolean aIsMerged = !"none".equals(a.getAcodec());
+        boolean bIsMerged = !"none".equals(b.getAcodec());
+        if (aIsMerged && !bIsMerged) return a;
+        if (!aIsMerged && bIsMerged) return b;
+
+        // 规则3：文件大小大的优先（码率更高，画质更好）
+        if (a.getFilesize() > b.getFilesize()) return a;
+        if (b.getFilesize() > a.getFilesize()) return b;
+
+        // 所有规则平局时默认返回A
+        return a;
+    }
+
+    /*
      * getDurationText: 获取格式化的时长文本
      * 将秒数转换为 "分:秒" 格式
      */

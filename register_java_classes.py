@@ -211,6 +211,15 @@ def main():
                 "location": "(Files/app/src/main/java/com/example/grayvideodl/ui/home/HomeFragment.java)[HomeFragment->showToast:252]",
                 "other": "封装Toast.makeText调用",
             },
+            {
+                "name": "simplifyCodec",
+                "type": "方法",
+                "params": "vcodec<String>",
+                "return_type": "String",
+                "meaning": "简化视频编码名称，将avc1.640028转为h264，hevc转为h265，av01转为av1",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/ui/home/HomeFragment.java)[HomeFragment->simplifyCodec:513]",
+                "other": "用于格式行标签显示，unknown编码截取前8字符",
+            },
         ],
     )
 
@@ -264,7 +273,109 @@ def main():
         ],
     )
 
+    registerDownloadAdapterUpdates()
+    registerDownloadTaskUpdates()
+    registerVideoInfoModelUpdates()
     print("\n所有函数注册表更新完成！")
+
+
+def registerDownloadAdapterUpdates():
+    """注册 DownloadAdapter 新增的方法"""
+    createOrUpdateRegFile(
+        "Files/app/src/main/java/com/example/grayvideodl/ui/download/DownloadAdapter.java",
+        [
+            {
+                "name": "setSpeedSizeText",
+                "type": "方法",
+                "params": "task<DownloadTask>",
+                "return_type": "void",
+                "meaning": "设置下载速度和已下载/总大小文本显示，速度>0时显示\"⬇ 速度 · 已下载/总大小\"",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/ui/download/DownloadAdapter.java)[DownloadAdapter.ViewHolder->setSpeedSizeText:234]",
+                "other": "下载中和暂停状态均显示，数据不足时隐藏",
+            },
+            {
+                "name": "formatSpeedStatic",
+                "type": "方法",
+                "params": "bytesPerSec<double>",
+                "return_type": "String",
+                "meaning": "将字节/秒格式化为可读速度文本（如\"2.3 MiB/s\"），静态方法",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/ui/download/DownloadAdapter.java)[DownloadAdapter.ViewHolder->formatSpeedStatic:259]",
+                "other": "支持B/s、KiB/s、MiB/s三级单位",
+            },
+            {
+                "name": "formatBytesStatic",
+                "type": "方法",
+                "params": "bytes<long>",
+                "return_type": "String",
+                "meaning": "将字节数格式化为可读大小文本（如\"45.2 MB\"），静态方法",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/ui/download/DownloadAdapter.java)[DownloadAdapter.ViewHolder->formatBytesStatic:272]",
+                "other": "支持B、KB、MB三级单位",
+            },
+        ],
+    )
+
+
+def registerDownloadTaskUpdates():
+    """注册 DownloadTask 新增的字段和对应 getter/setter"""
+    createOrUpdateRegFile(
+        "Files/app/src/main/java/com/example/grayvideodl/model/DownloadTask.java",
+        [
+            {
+                "name": "downloadedBytes",
+                "type": "字段",
+                "params": "long",
+                "return_type": "",
+                "meaning": "已下载字节数，从进度文件实时更新，持久化保存",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/model/DownloadTask.java)[DownloadTask:36]",
+                "other": "getDownloadedBytes/setDownloadedBytes获取和设置",
+            },
+            {
+                "name": "totalBytesForProgress",
+                "type": "字段",
+                "params": "long",
+                "return_type": "",
+                "meaning": "总字节数，从进度文件实时更新，持久化保存",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/model/DownloadTask.java)[DownloadTask:37]",
+                "other": "getTotalBytesForProgress/setTotalBytesForProgress获取和设置",
+            },
+            {
+                "name": "speed",
+                "type": "字段",
+                "params": "double",
+                "return_type": "",
+                "meaning": "下载速度（字节/秒），仅运行时使用，不持久化",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/model/DownloadTask.java)[DownloadTask:38]",
+                "other": "getSpeed/setSpeed获取和设置",
+            },
+        ],
+    )
+
+
+def registerVideoInfoModelUpdates():
+    """注册 VideoInfo 新增的方法"""
+    createOrUpdateRegFile(
+        "Files/app/src/main/java/com/example/grayvideodl/model/VideoInfo.java",
+        [
+            {
+                "name": "aggregateByQuality",
+                "type": "方法",
+                "params": "",
+                "return_type": "List<Format>",
+                "meaning": "按画质聚合格式列表，每种画质只保留一个最佳格式，用于去重显示",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/model/VideoInfo.java)[VideoInfo->aggregateByQuality:221]",
+                "other": "跳过纯音频格式，按360p/720p/1080p分组",
+            },
+            {
+                "name": "pickBetterFormat",
+                "type": "方法",
+                "params": "a<Format>, b<Format>",
+                "return_type": "Format",
+                "meaning": "比较两个同画质的格式，按非锁定>锁定、合并>纯视频、文件大>文件小的优先级返回更优格式",
+                "location": "(Files/app/src/main/java/com/example/grayvideodl/model/VideoInfo.java)[VideoInfo->pickBetterFormat:258]",
+                "other": "静态私有方法，被aggregateByQuality调用",
+            },
+        ],
+    )
 
 
 def registerVideoInfoModel():

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ * dialog_init_check.xml
+ * 初始化检查结果展示对话框布局。
+ * 显示检查状态图标、标题、详细结果信息，3 秒后自动关闭。
+ -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <!-- 状态图标 -->
+    <TextView
+        android:id="@+id/tv_check_icon"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:gravity="center"
+        android:textSize="36sp"
+        android:background="@drawable/circle_bg"
+        android:textColor="@android:color/white" />
+
+    <!-- 标题 -->
+    <TextView
+        android:id="@+id/tv_check_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:text="初始化检查"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/black" />
+
+    <!-- 结果详情 -->
+    <TextView
+        android:id="@+id/tv_check_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:lineSpacingExtra="4dp"
+        android:textSize="14sp"
+        android:textColor="#FF555555" />
+
+</LinearLayout>

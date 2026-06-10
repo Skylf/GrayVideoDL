@@ -63,12 +63,28 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- 提示：B站登录说明 -->
+    <TextView
+        android:id="@+id/tv_login_notice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="10dp"
+        android:textSize="12sp"
+        android:textColor="#FF8B4513"
+        android:background="#FFFFF8DC"
+        android:gravity="center"
+        android:text="登录账号必须有大会员才能解除B站的下载画质限制"
+        android:lineSpacingExtra="2dp"
+        app:layout_constraintTop_toBottomOf="@id/progress_bar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- WebView 区域 -->
     <WebView
         android:id="@+id/webview_login"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/progress_bar"
+        app:layout_constraintTop_toBottomOf="@id/tv_login_notice"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
