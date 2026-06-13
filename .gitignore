@@ -40,6 +40,8 @@ build/
 *_cookies.json
 *LoginLog*.txt
 *TestLog*.txt
+DL-*-Log.txt
+ks-*.txt
 *.log
 
 ## 项目说明文档 (Excel 二进制文件保留)

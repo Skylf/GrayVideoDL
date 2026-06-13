@@ -12,7 +12,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 1
-        versionName = "0.5A"
+        versionName = "0.6A"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -57,8 +57,9 @@ chaquopy {
         // yt-dlp：通用视频下载工具，支持 1800+ 平台
         // 注意：PyPI 镜像通过 PIP_INDEX_URL 环境变量在 gradlew.bat 中配置
         pip {
-            // 直接安装 yt-dlp 包
-            install("yt-dlp")
+            // 安装 yt-dlp（含 curl-cffi 扩展，用于 TLS 指纹模拟）
+            // [curl-cffi] 解决抖音/快手等平台的反爬拦截
+            install("yt-dlp[curl-cffi]")
         }
     }
 }

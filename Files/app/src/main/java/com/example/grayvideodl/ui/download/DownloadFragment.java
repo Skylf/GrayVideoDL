@@ -30,6 +30,7 @@ import com.chaquo.python.Python;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.android.AndroidPlatform;
 import com.example.grayvideodl.R;
+import com.example.grayvideodl.PlatformCookieManager;
 import com.example.grayvideodl.model.DownloadTask;
 import com.example.grayvideodl.ui.settings.BilibiliLoginDialog;
 
@@ -569,8 +570,10 @@ public class DownloadFragment extends Fragment
         // 获取下载目录
         File downloadDir = getDownloadDirectory(ctx);
 
-        // 获取 Cookie 文件
-        String cookieFile = BilibiliLoginDialog.getCookieFilePath(ctx);
+        // 根据视频链接自动检测所属平台，传入对应平台的 Cookie 文件路径
+        // 不同平台使用独立的 Cookie 文件（格式：{platform}_cookies.txt）
+        String cookieFile = PlatformCookieManager
+                .getCookieFilePath(ctx, task.getUrl());
 
         // 启动进度轮询（每 500ms 读取一次进度文件）
         final boolean[] isDownloadDone = {false};

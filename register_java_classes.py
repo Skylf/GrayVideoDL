@@ -424,7 +424,7 @@ def registerVideoInfoModel():
 
 
 def registerPythonModule():
-    """为 Python 桥接模块创建函数注册表"""
+    """为 Python 桥接模块创建函数注册表（重构版 v2）"""
     createOrUpdateRegFile(
         "Files/app/src/main/python/ytdlp_bridge.py",
         [
@@ -433,9 +433,18 @@ def registerPythonModule():
                 "type": "模块",
                 "params": "",
                 "return_type": "",
-                "meaning": "Python桥接模块，通过Chaquopy在Android中运行，提供yt-dlp的封装接口",
+                "meaning": "Python桥接模块（重构版v2），通过Chaquopy在Android中运行，提供yt-dlp的封装接口。核心设计：不再自行解析URL或模拟浏览器，所有链接分析由yt-dlp内部extractor完成",
                 "location": "(Files/app/src/main/python/ytdlp_bridge.py)[ytdlp_bridge:1]",
-                "other": "包含环境检测和视频信息提取功能",
+                "other": "重构版移除了所有自定义解析逻辑",
+            },
+            {
+                "name": "_log",
+                "type": "函数",
+                "params": "message<str>",
+                "return_type": "void",
+                "meaning": "输出日志到logcat，通过Chaquopy的stdout重定向机制",
+                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[_log:23]",
+                "other": "统一使用[ResolveVideoDL]前缀方便过滤",
             },
             {
                 "name": "testEnvironment",
@@ -443,17 +452,44 @@ def registerPythonModule():
                 "params": "",
                 "return_type": "str",
                 "meaning": "测试Python运行环境，返回Python版本和yt-dlp安装状态",
-                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[testEnvironment:12]",
+                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[testEnvironment:29]",
                 "other": "返回JSON格式字符串",
+            },
+            {
+                "name": "_get_common_opts",
+                "type": "函数",
+                "params": "cookie_file<str>",
+                "return_type": "dict",
+                "meaning": "构建通用yt-dlp选项字典，使用yt-dlp原生参数配置(cookiefile/impersonate/format_sort)，不再设置自定义请求头或平台检测",
+                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[_get_common_opts:54]",
+                "other": "impersonate启用浏览器TLS指纹模拟",
             },
             {
                 "name": "extractVideoInfo",
                 "type": "函数",
-                "params": "video_url<str>",
+                "params": "video_url<str>, cookie_file<str>",
                 "return_type": "str",
-                "meaning": "提取指定视频链接的信息，使用yt-dlp获取标题、格式、时长等元数据",
-                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[extractVideoInfo:55]",
-                "other": "返回JSON格式字符串，包含可用格式列表",
+                "meaning": "提取指定视频链接的信息（重构版），直接调用yt-dlp提取元数据，不再尝试URL变体或回退方案",
+                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[extractVideoInfo:98]",
+                "other": "返回JSON格式字符串，保留yt-dlp原始format_note",
+            },
+            {
+                "name": "downloadVideo",
+                "type": "函数",
+                "params": "video_url<str>, format_id<str>, output_dir<str>, cookie_file<str>",
+                "return_type": "str",
+                "meaning": "下载指定视频的特定格式到本地目录（无进度回调版本），直接使用用户原始URL",
+                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[downloadVideo:180]",
+                "other": "兼容旧调用接口",
+            },
+            {
+                "name": "downloadVideoWithProgress",
+                "type": "函数",
+                "params": "video_url<str>, format_id<str>, output_dir<str>, cookie_file<str>, progress_file<str>, cancel_flag_file<str>",
+                "return_type": "str",
+                "meaning": "下载指定视频并支持进度回调和取消操作，通过progress_hook实时写入进度并检测取消标志",
+                "location": "(Files/app/src/main/python/ytdlp_bridge.py)[downloadVideoWithProgress:244]",
+                "other": "支持暂停/继续操作",
             },
         ],
     )

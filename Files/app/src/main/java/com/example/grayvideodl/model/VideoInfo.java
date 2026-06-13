@@ -243,13 +243,13 @@ public class VideoInfo {
                 bestByQuality.put(qualityKey, fmt);
             } else {
                 // 已有代表格式，比较并保留更优的一个
-                Format better = pickBetterFormat(existing, fmt);
-                bestByQuality.put(qualityKey, better);
+                    Format better = pickBetterFormat(existing, fmt);
+                    bestByQuality.put(qualityKey, better);
+                }
             }
-        }
 
-        return new ArrayList<>(bestByQuality.values());
-    }
+            return new ArrayList<>(bestByQuality.values());
+        }
 
     /*
      * pickBetterFormat: 比较两个同画质的格式，返回更优的一个

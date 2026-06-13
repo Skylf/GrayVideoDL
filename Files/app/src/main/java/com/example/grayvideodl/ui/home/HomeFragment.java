@@ -36,6 +36,7 @@ import com.example.grayvideodl.R;
 import com.example.grayvideodl.model.DownloadTask;
 import com.example.grayvideodl.model.LogBuffer;
 import com.example.grayvideodl.model.VideoInfo;
+import com.example.grayvideodl.PlatformCookieManager;
 import com.example.grayvideodl.ui.settings.BilibiliLoginDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -766,9 +767,11 @@ public class HomeFragment extends Fragment {
 
             PyObject result;
             if ("extractVideoInfo".equals(name)) {
-                // 传入 Cookie 文件路径（与 yt-dlp --cookies 等效）
-                String cookieFile = BilibiliLoginDialog
-                        .getCookieFilePath(requireContext());
+                // 根据视频链接自动检测所属平台，传入对应平台的 Cookie 文件路径
+                // 不同平台使用独立的 Cookie 文件（格式：{platform}_cookies.txt）
+                // 与 yt-dlp --cookies 参数等效，用于解锁需登录才能访问的内容
+                String cookieFile = PlatformCookieManager
+                        .getCookieFilePath(requireContext(), param);
                 result = mod.callAttr(name, param, cookieFile);
             } else if (param.isEmpty()) {
                 result = mod.callAttr(name);

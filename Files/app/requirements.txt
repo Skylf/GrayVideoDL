@@ -3,4 +3,6 @@
 
 # yt-dlp: 通用视频下载器，支持 1800+ 媒体平台
 # 包含视频信息提取、格式选择、下载等功能
-yt-dlp
+# [curl-cffi] extra 提供 TLS 指纹模拟（impersonate），
+# 用于绕过抖音/快手/TikTok 等平台的反爬机制
+yt-dlp[curl-cffi]
