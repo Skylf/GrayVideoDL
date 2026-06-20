@@ -9,6 +9,7 @@ package com.example.grayvideodl.ui.download;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -446,6 +447,41 @@ public class DownloadFragment extends Fragment
         }
         Log.d(TAG, "onOpenFolder: 使用task中的路径: " + folderPath);
         openFolder(folderPath);
+    }
+
+    /*
+     * onShare: 分享已下载的文件
+     * 通过系统 Intent.ACTION_SEND 弹出应用选择器，让用户选择微信、QQ 等应用接收文件。
+     * 使用 FileProvider 生成 content:// URI 确保 Android 7.0+ 跨应用文件访问。
+     */
+    @Override
+    public void onShare(DownloadTask task) {
+        // 获取已下载文件路径
+        String filePath = task.getFilepath();
+        if (filePath == null || filePath.isEmpty()) {
+            showToast("文件路径不存在");
+            return;
+        }
+        File file = new File(filePath);
+        if (!file.exists()) {
+            showToast("文件已被删除");
+            return;
+        }
+
+        // 根据文件扩展名获取 MIME 类型
+        String mimeType = getMimeType(file.getName());
+        // 通过 FileProvider 生成 content:// URI，确保跨应用可读
+        Uri fileUri = getUriForFile(requireContext(), file);
+
+        // 构建 ACTION_SEND 分享 Intent
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.setType(mimeType);
+        shareIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
+        // 临时授予目标应用读取此 URI 的权限
+        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        // 弹出系统应用选择器
+        startActivity(Intent.createChooser(shareIntent, "分享到..."));
     }
 
     /*
@@ -1092,5 +1128,38 @@ public class DownloadFragment extends Fragment
             layoutFfmpegWarningToast.startAnimation(fadeOut);
             layoutFfmpegWarningToast.setAlpha(0f);
         }, 6000);
+    }
+
+    /*
+     * getMimeType: 根据文件名扩展名获取对应的 MIME 类型
+     * 用于分享 Intent 的 setType 参数，让系统正确识别文件类型
+     * @param fileName 文件名（含扩展名）
+     * @return MIME 类型字符串，未知类型返回 &#42;&#47;&#42;（通用通配符）
+     */
+    private String getMimeType(String fileName) {
+        if (fileName.endsWith(".mp4")) return "video/mp4";
+        if (fileName.endsWith(".mkv")) return "video/x-matroska";
+        if (fileName.endsWith(".webm")) return "video/webm";
+        if (fileName.endsWith(".m4a")) return "audio/mp4";
+        if (fileName.endsWith(".mp3")) return "audio/mpeg";
+        if (fileName.endsWith(".aac")) return "audio/aac";
+        return "*/*"; // 未知类型使用通用通配符
+    }
+
+    /*
+     * getUriForFile: 通过 FileProvider 为指定文件生成 content:// URI
+     * 用于跨应用文件分享，确保 Android 7.0+ 上目标应用能正常读取文件。
+     * 底层使用 android.support.FILE_PROVIDER_PATHS 配置（res/xml/file_paths.xml）
+     * 将文件路径映射为 content:// URI。
+     * @param context 上下文
+     * @param file 要分享的文件
+     * @return content:// URI
+     */
+    private Uri getUriForFile(Context context, File file) {
+        return androidx.core.content.FileProvider.getUriForFile(
+                context,
+                context.getPackageName() + ".fileprovider",
+                file
+        );
     }
 }

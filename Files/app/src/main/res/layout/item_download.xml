@@ -162,6 +162,26 @@
                 android:text="取消"
                 android:visibility="gone" />
 
+            <!-- 分享按钮（带边框样式，仅在任务已完成时由适配器控制显示） -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_share"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:minWidth="0dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:minWidth="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:text="分享"
+                android:visibility="gone"
+                android:layout_marginEnd="4dp" />
+
             <!-- 删除按钮（带边框样式） -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete"

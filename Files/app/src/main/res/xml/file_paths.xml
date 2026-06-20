@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ * file_paths.xml
+ * FileProvider 路径配置文件：定义可供外部应用访问的文件路径。
+ * 用于分享功能，通过 content:// URI 向其他应用临时授权访问下载的文件。
+ -->
+<paths>
+    <!-- 分享公共 Download 目录下的 GrayVideoDL 文件夹中的文件 -->
+    <external-path
+        name="downloads"
+        path="Download/GrayVideoDL/" />
+    <!-- 如果文件可能存放在应用私有目录，可用以下路径兜底 -->
+    <files-path
+        name="internal_files"
+        path="/" />
+</paths>

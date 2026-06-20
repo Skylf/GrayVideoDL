@@ -34,11 +34,13 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
      * 取消：取消正在下载的任务
      * 删除：移除任务和文件
      * 打开文件夹：打开下载文件所在目录
+     * 分享：将已下载的文件通过系统分享发送给其他应用
      */
     public interface OnTaskActionListener {
         void onCancel(DownloadTask task);
         void onDelete(DownloadTask task);
         void onOpenFolder(DownloadTask task);
+        void onShare(DownloadTask task);
     }
 
     /*
@@ -110,6 +112,9 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         // 删除任务按钮
         private MaterialButton btnDelete;
 
+        // 分享任务按钮（仅在任务已完成时显示）
+        private MaterialButton btnShare;
+
         // 下载路径容器布局（可点击打开文件夹）
         private View layoutDownloadPath;
 
@@ -130,6 +135,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
             tvStatus = itemView.findViewById(R.id.tv_task_status);
             btnCancel = itemView.findViewById(R.id.btn_pause_resume);
             btnDelete = itemView.findViewById(R.id.btn_delete);
+            btnShare = itemView.findViewById(R.id.btn_share);
             layoutDownloadPath = itemView.findViewById(R.id.layout_download_path);
             tvDownloadPath = itemView.findViewById(R.id.tv_download_path);
             tvOpenFolder = itemView.findViewById(R.id.tv_open_folder);
@@ -163,22 +169,27 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
                                 android.R.color.darker_gray));
 
             } else if (DownloadTask.STATUS_COMPLETED.equals(status)) {
-                // 已完成：隐藏进度条、速度/大小文本和取消按钮
+                // 已完成：隐藏进度条、速度/大小文本和取消按钮，显示分享按钮
                 progressBar.setVisibility(View.GONE);
                 tvSpeedSize.setVisibility(View.GONE);
                 btnCancel.setVisibility(View.GONE);
+                btnShare.setVisibility(View.VISIBLE);
                 tvStatus.setTextColor(
                         itemView.getContext().getColor(
                                 android.R.color.holo_green_dark));
 
             } else if (DownloadTask.STATUS_FAILED.equals(status)) {
-                // 失败：隐藏进度条、速度/大小文本和取消按钮
+                // 失败：隐藏进度条、速度/大小文本、取消按钮和分享按钮
                 progressBar.setVisibility(View.GONE);
                 tvSpeedSize.setVisibility(View.GONE);
                 btnCancel.setVisibility(View.GONE);
+                btnShare.setVisibility(View.GONE);
                 tvStatus.setTextColor(
                         itemView.getContext().getColor(
                                 android.R.color.holo_red_dark));
+            } else {
+                // 其他状态（如暂停等）：隐藏分享按钮
+                btnShare.setVisibility(View.GONE);
             }
 
             // 取消按钮点击事件
@@ -197,6 +208,16 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
                 public void onClick(View v) {
                     if (listener != null) {
                         listener.onDelete(task);
+                    }
+                }
+            });
+
+            // 分享按钮点击事件（通过回调通知 DownloadFragment 执行分享逻辑）
+            btnShare.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (listener != null) {
+                        listener.onShare(task);
                     }
                 }
             });
