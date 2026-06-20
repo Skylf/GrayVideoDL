@@ -12,7 +12,9 @@ import android.view.animation.Animation;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.TypedArray;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
@@ -511,8 +513,11 @@ public class HomeFragment extends Fragment {
             tvFormatCount.append(" · " + audioFormats.size() + " 种音质");
         }
 
-        // 填充视频格式列表
+        // 添加提示文字：提醒用户点击列表选择画质
         layoutVideoFormats.removeAllViews();
+        layoutVideoFormats.addView(createFormatHintView());
+        // 添加表格列标题行（画质 | 格式 | 编码方式 | 大小）
+        layoutVideoFormats.addView(createTableHeader(false));
         for (VideoInfo.Format fmt : videoFormats) {
             layoutVideoFormats.addView(createFormatRow(fmt));
         }
@@ -526,6 +531,8 @@ public class HomeFragment extends Fragment {
             tvAudioSectionTitle.setVisibility(View.VISIBLE);
             layoutAudioFormats.setVisibility(View.VISIBLE);
             layoutAudioFormats.removeAllViews();
+            // 添加表格列标题行（音频：音频 | 格式 | 编码方式 | 大小 | 操作）
+            layoutAudioFormats.addView(createTableHeader(true));
             for (VideoInfo.Format fmt : audioFormats) {
                 layoutAudioFormats.addView(createFormatRow(fmt));
             }
@@ -685,76 +692,225 @@ public class HomeFragment extends Fragment {
     }
 
     /*
-     * createFormatRow: 创建一个可点击的格式选择行
+     * createTableHeader: 创建表格列标题行
+     * 为格式列表添加标题行，区分视频和音频。
+     * 标题行使用浅蓝灰背景，深蓝灰粗体文字，视觉上作为表格头部。
+     * @param isAudio true表示音频列表标题，false表示视频列表标题
+     */
+    private View createTableHeader(boolean isAudio) {
+        // 标题卡片：圆角矩形，浅蓝灰背景，无边框
+        MaterialCardView headerCard = new MaterialCardView(requireContext());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, 4);
+        headerCard.setLayoutParams(params);
+        headerCard.setStrokeWidth(0);
+        headerCard.setCardElevation(0);
+        headerCard.setContentPadding(12, 12, 12, 12);
+        headerCard.setRadius(6);
+        headerCard.setEnabled(false);
+        headerCard.setBackgroundTintList(
+                android.content.res.ColorStateList.valueOf(
+                        getResources().getColor(R.color.table_header_bg)));
+
+        LinearLayout headerRow = new LinearLayout(requireContext());
+        headerRow.setOrientation(LinearLayout.HORIZONTAL);
+        headerRow.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        // 列标题
+        String[] headers;
+        if (isAudio) {
+            headers = new String[]{"音频", "格式", "编码方式", "大小"};
+        } else {
+            headers = new String[]{"画质", "格式", "编码方式", "大小"};
+        }
+        float[] weights = {1.2f, 0.6f, 0.8f, 1.0f};
+
+        for (int i = 0; i < headers.length; i++) {
+            TextView headerView = new TextView(requireContext());
+            headerView.setLayoutParams(new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, weights[i]));
+            headerView.setTextSize(12);
+            headerView.setText(headers[i]);
+            headerView.setTextColor(getResources().getColor(
+                    R.color.table_header_text));
+            headerView.setPadding(4, 6, 4, 6);
+            headerView.setTypeface(null, android.graphics.Typeface.BOLD);
+            headerRow.addView(headerView);
+        }
+
+        headerCard.addView(headerRow);
+        return headerCard;
+    }
+
+    /*
+     * createFormatHintView: 创建格式列表上方的提示文字
+     * 提示用户点击表格中的某一列选择画质，否则无法下载。
+     * 返回一个带有信息图标的浅色提示条，置于表格上方。
+     */
+    private View createFormatHintView() {
+        LinearLayout hintLayout = new LinearLayout(requireContext());
+        hintLayout.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, 0, 8);
+        hintLayout.setLayoutParams(lp);
+        hintLayout.setPadding(12, 8, 12, 8);
+        hintLayout.setBackgroundResource(R.drawable.bg_platform_warning_toast);
+
+        // 左侧提示图标
+        TextView iconView = new TextView(requireContext());
+        iconView.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        iconView.setText("💡");
+        iconView.setTextSize(14);
+
+        // 右侧提示文字
+        TextView hintView = new TextView(requireContext());
+        hintView.setLayoutParams(new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
+        hintView.setPadding(6, 0, 0, 0);
+        hintView.setTextSize(12);
+        hintView.setText("点击下方列表项选择画质，选中后即可下载");
+        hintView.setTextColor(getResources().getColor(R.color.warning_text));
+
+        hintLayout.addView(iconView);
+        hintLayout.addView(hintView);
+        return hintLayout;
+    }
+
+    /*
+     * createFormatRow: 创建一个可点击的格式选择行（表格卡片样式）
+     * 每行是一个圆角白色卡片，带浅灰边框。
+     * 视频行文字色使用 table_text_primary（深灰），大小列使用 table_text_secondary（中灰）。
+     * 音频行背景为暖白底色，便于目视区分。
+     * 选中时卡片边框变为蓝色，背景变为浅蓝。
      */
     private View createFormatRow(VideoInfo.Format format) {
         MaterialCardView card = new MaterialCardView(requireContext());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, 0, 0, 8);
+        params.setMargins(0, 0, 0, 6);
         card.setLayoutParams(params);
-        card.setStrokeWidth(1);
-        card.setStrokeColor(getResources().getColor(R.color.error_border, null));
-        card.setCardElevation(0);
-        card.setContentPadding(12, 10, 12, 10);
-        card.setRadius(8);
+        card.setStrokeWidth(3);
+        card.setStrokeColor(getResources().getColor(R.color.table_card_border));
+        card.setCardElevation(1);
+        card.setContentPadding(12, 12, 12, 12);
+        card.setRadius(6);
         card.setClickable(true);
         card.setFocusable(true);
-        card.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                getResources().getColor(R.color.chip_unselected_bg, null)));
+        card.setCardBackgroundColor(getResources().getColor(R.color.table_card_bg));
+        // 使用主题水波纹背景作为前景，增强点击视觉反馈
+        TypedArray a = requireContext().obtainStyledAttributes(
+                new int[]{android.R.attr.selectableItemBackground});
+        android.graphics.drawable.Drawable selectableBg = a.getDrawable(0);
+        a.recycle();
+        card.setForeground(selectableBg);
 
-        LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setLayoutParams(new LinearLayout.LayoutParams(
+        // 整体行布局：水平排列的表格列
+        LinearLayout tableRow = new LinearLayout(requireContext());
+        tableRow.setOrientation(LinearLayout.HORIZONTAL);
+        tableRow.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        TextView label = new TextView(requireContext());
-        label.setLayoutParams(new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        label.setTextSize(14);
-
-        String labelText;
         if (format.isAudioOnly()) {
-            // 音频格式：显示编码 + 扩展名，如 "mp4a · m4a"
-            labelText = format.getAcodec() + " · " + format.getExt();
+            // ===== 音频格式行 =====
+            // 音频行使用暖白背景进行区分
+            card.setCardBackgroundColor(
+                    getResources().getColor(R.color.table_audio_bg));
+
+            String[] columns = {format.getExt(), format.getAcodec(),
+                    format.getFilesizeText()};
+            float[] weights = {1.2f, 0.6f, 0.8f, 1.0f};
+            // 音频标签（第一列）
+            TextView audioLabel = new TextView(requireContext());
+            audioLabel.setLayoutParams(new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, weights[0]));
+            audioLabel.setTextSize(13);
+            audioLabel.setText("音频");
+            audioLabel.setTextColor(getResources().getColor(
+                    R.color.table_text_primary));
+            audioLabel.setPadding(4, 10, 4, 10);
+            audioLabel.setTypeface(null, android.graphics.Typeface.BOLD);
+            tableRow.addView(audioLabel);
+            // 其余数据列
+            for (int i = 0; i < columns.length; i++) {
+                TextView col = new TextView(requireContext());
+                col.setLayoutParams(new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT,
+                        weights[i + 1]));
+                col.setTextSize(13);
+                col.setText(columns[i]);
+                // 大小列使用次要色，其余列使用主色
+                if (i == columns.length - 1) {
+                    col.setTextColor(getResources().getColor(
+                            R.color.table_text_secondary));
+                } else {
+                    col.setTextColor(getResources().getColor(
+                            R.color.table_text_primary));
+                }
+                col.setPadding(4, 10, 4, 10);
+                col.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                col.setMaxLines(1);
+                tableRow.addView(col);
+            }
+
+            // 锁定格式：灰色不可点击
+            if (format.isLocked()) {
+                card.setEnabled(false);
+                card.setAlpha(0.45f);
+            } else {
+                card.setOnClickListener(v -> selectFormat(card, format));
+            }
         } else {
-            // 视频格式：显示画质 + 格式类型 + 编码方式，如 "1080p · 格式：mp4 · 编码方式：h264"
+            // ===== 视频格式行 =====
             String vcodec = format.getVcodec();
-            // 简化编码名称：avc1 → h264，hevc → h265，av01 → av1
             String codecSimple = simplifyCodec(vcodec != null ? vcodec : "");
-            labelText = format.getResolutionDisplay()
-                    + " · 格式：" + format.getExt()
-                    + " · 编码方式：" + codecSimple;
+            String[] columns = {format.getResolutionDisplay(), format.getExt(),
+                    codecSimple, format.getFilesizeText()};
+            float[] weights = {1.2f, 0.6f, 0.8f, 1.0f};
+            for (int i = 0; i < columns.length; i++) {
+                TextView col = new TextView(requireContext());
+                col.setLayoutParams(new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT,
+                        weights[i]));
+                col.setTextSize(13);
+                col.setText(columns[i]);
+                // 画质列使用粗体，大小列使用次要色
+                if (i == 0) {
+                    col.setTypeface(null, android.graphics.Typeface.BOLD);
+                    col.setTextColor(getResources().getColor(
+                            R.color.table_text_primary));
+                } else if (i == columns.length - 1) {
+                    col.setTextColor(getResources().getColor(
+                            R.color.table_text_secondary));
+                } else {
+                    col.setTextColor(getResources().getColor(
+                            R.color.table_text_primary));
+                }
+                col.setPadding(4, 10, 4, 10);
+                col.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                col.setMaxLines(1);
+                tableRow.addView(col);
+            }
+
+            if (format.isLocked()) {
+                // 锁定格式：灰色不可点击
+                card.setEnabled(false);
+                card.setAlpha(0.45f);
+            } else {
+                card.setOnClickListener(v -> selectFormat(card, format));
+            }
         }
-        label.setText(labelText);
 
-        TextView sizeLabel = new TextView(requireContext());
-        sizeLabel.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        sizeLabel.setTextSize(12);
-
-        // 锁定格式：显示锁定标记，灰色不可点击
-        if (format.isLocked()) {
-            sizeLabel.setText(format.getFilesizeText());
-            sizeLabel.setTextColor(
-                    getResources().getColor(R.color.error_border, null));
-            card.setEnabled(false);
-            card.setAlpha(0.45f);
-        } else {
-            sizeLabel.setText(format.getFilesizeText());
-            sizeLabel.setTextColor(
-                    getResources().getColor(android.R.color.darker_gray, null));
-            card.setOnClickListener(v -> selectFormat(card, format));
-        }
-
-        row.addView(label);
-        row.addView(sizeLabel);
-        card.addView(row);
-
-        card.setOnClickListener(v -> selectFormat(card, format));
+        card.addView(tableRow);
         return card;
     }
 
@@ -800,20 +956,22 @@ public class HomeFragment extends Fragment {
         btnDownload.setEnabled(true);
         btnDownload.setText(btnText);
 
-        // 高亮选中的卡片
+        // 高亮选中的卡片：蓝色边框 + 浅蓝背景
         LinearLayout parent = (LinearLayout) selectedCard.getParent();
         for (int i = 0; i < parent.getChildCount(); i++) {
             View child = parent.getChildAt(i);
             if (child instanceof MaterialCardView) {
                 MaterialCardView c = (MaterialCardView) child;
                 if (c == selectedCard) {
-                    c.setStrokeColor(getResources().getColor(R.color.error_text, null));
-                    c.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                            getResources().getColor(R.color.chip_selected_bg, null)));
+                    c.setStrokeColor(getResources().getColor(
+                            R.color.table_selected_border));
+                    c.setCardBackgroundColor(getResources().getColor(
+                            R.color.table_selected_bg));
                 } else {
-                    c.setStrokeColor(getResources().getColor(R.color.error_border, null));
-                    c.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                            getResources().getColor(R.color.chip_unselected_bg, null)));
+                    c.setStrokeColor(getResources().getColor(
+                            R.color.table_card_border));
+                    c.setCardBackgroundColor(getResources().getColor(
+                            R.color.table_card_bg));
                 }
             }
         }
@@ -874,73 +1032,132 @@ public class HomeFragment extends Fragment {
     }
 
     private void onTestEnvClick() {
-        appendLog("开始环境检测...");
+        appendLog("开始完整环境检测...");
 
         // 禁用按钮防止重复点击
         setButtonsEnabled(false);
-        showLoadingDialog("正在测试环境...");
+        showLoadingDialog("正在全面检测环境...");
 
         new Thread(() -> {
             // ========== 1. 检测 Python / yt-dlp 环境 ==========
-            String envInfo = callPythonFunction("testEnvironment", "");
-            appendLog("Python 环境检测结果:\n" + envInfo);
-
-            // 解析 Python 检测结果
             boolean pythonOk = false;
-            String pythonVersion = "";
-            String ytDlpVersion = "";
             try {
+                String envInfo = callPythonFunction("testEnvironment", "");
+                appendLog("Python 环境检测结果:\n" + envInfo);
                 JSONObject json = new JSONObject(envInfo);
                 pythonOk = json.optBoolean("yt_dlp_installed", false)
                         && "ok".equals(json.optString("status", ""));
-                pythonVersion = json.optString("python_version", "");
-                ytDlpVersion = json.optString("yt_dlp_version", "");
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                appendLog("Python 环境检测异常: " + e.getMessage());
             }
 
             // ========== 2. 检测 FFmpeg 环境 ==========
+            boolean ffmpegOk = false;
             FFmpegManager ffManager = FFmpegManager.getInstance();
-            boolean ffmpegOk = ffManager.isFfmpegAvailable();
-            String ffmpegPath = ffManager.getFfmpegPath();
-            String ffmpegSize = "";
-            String ffmpegDetail = "";
-
-            if (ffmpegOk && ffmpegPath != null && !ffmpegPath.isEmpty()) {
-                File ffmpegFile = new File(ffmpegPath);
-                if (ffmpegFile.exists()) {
-                    ffmpegSize = formatFileSizeForEnv(ffmpegFile.length());
-                }
-                ffmpegDetail = "路径: " + ffmpegPath + "\n大小: " + ffmpegSize;
-                appendLog("FFmpeg 环境正常: " + ffmpegPath);
-            } else {
-                // 尝试检查 files 目录
-                File fallbackFile = new File(requireContext().getFilesDir(), "ffmpeg");
+            ffmpegOk = ffManager.isFfmpegAvailable();
+            if (!ffmpegOk) {
+                // 尝试检查 files 目录下的 ffmpeg
+                File fallbackFile = new File(
+                        requireContext().getFilesDir(), "ffmpeg");
                 if (fallbackFile.exists()) {
                     ffmpegOk = true;
-                    ffmpegPath = fallbackFile.getAbsolutePath();
-                    ffmpegSize = formatFileSizeForEnv(fallbackFile.length());
-                    ffmpegDetail = "路径: " + ffmpegPath + "\n大小: " + ffmpegSize;
-                    appendLog("FFmpeg 文件存在（状态待确认）: " + ffmpegPath);
-                } else {
-                    ffmpegDetail = "FFmpeg 未就绪（分离流视频将无音频）";
-                    appendLog("FFmpeg 未就绪");
                 }
+            }
+            appendLog("FFmpeg 检测: " + (ffmpegOk ? "已就绪" : "未就绪"));
+
+            // ========== 3. 检测存储目录 ==========
+            boolean storageOk = false;
+            String storageMsg = "";
+            try {
+                File downloadDir = new File(
+                        Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_DOWNLOADS),
+                        "GrayVideoDL");
+                if (!downloadDir.exists()) {
+                    boolean created = downloadDir.mkdirs();
+                    storageMsg = created ? "目录已创建" : "目录创建失败";
+                } else {
+                    storageMsg = "目录正常";
+                }
+                boolean canWrite = downloadDir.exists()
+                        && downloadDir.canWrite();
+                storageOk = downloadDir.exists() && canWrite;
+                if (!canWrite) {
+                    storageMsg = "目录无写入权限";
+                }
+                appendLog("存储目录检测: " + storageMsg);
+            } catch (Exception e) {
+                storageMsg = "检测异常: " + e.getMessage();
+                appendLog("存储目录检测异常: " + e.getMessage());
+            }
+
+            // ========== 4. 检测网络连通性 ==========
+            boolean networkOk = false;
+            String networkMsg = "";
+            try {
+                // 简单检测：尝试建立 HTTP 连接到常用 CDN
+                java.net.URL url = new java.net.URL("https://www.baidu.com");
+                java.net.HttpURLConnection conn =
+                        (java.net.HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(2000);
+                conn.setRequestMethod("HEAD");
+                int responseCode = conn.getResponseCode();
+                networkOk = responseCode == java.net.HttpURLConnection.HTTP_OK;
+                networkMsg = "网络正常 (响应码: " + responseCode + ")";
+                conn.disconnect();
+                appendLog("网络连通性: " + networkMsg);
+            } catch (Exception e) {
+                networkMsg = "无法连接网络";
+                appendLog("网络连通性: " + networkMsg);
+            }
+
+            // ========== 5. 检测 Cookie 文件状态 ==========
+            boolean cookieOk = false;
+            String cookieMsg = "";
+            try {
+                File cookieDir = new File(
+                        requireContext().getFilesDir(), "cookies");
+                if (cookieDir.exists() && cookieDir.isDirectory()) {
+                    File[] cookieFiles = cookieDir.listFiles(
+                            (dir, name) -> name.endsWith(".txt"));
+                    if (cookieFiles != null && cookieFiles.length > 0) {
+                        cookieOk = true;
+                        cookieMsg = "已配置 "
+                                + cookieFiles.length + " 个 Cookies";
+                    } else {
+                        cookieMsg = "未找到 Cookie 文件（非会员无需配置）";
+                    }
+                } else {
+                    cookieMsg = "未配置 Cookie（非会员无需配置）";
+                }
+                appendLog("Cookie 状态: " + cookieMsg);
+            } catch (Exception e) {
+                cookieMsg = "检测异常";
+                appendLog("Cookie 检测异常: " + e.getMessage());
             }
 
             final boolean finalPythonOk = pythonOk;
-            final String finalPythonVersion = pythonVersion;
-            final String finalYtDlpVersion = ytDlpVersion;
             final boolean finalFfmpegOk = ffmpegOk;
-            final String finalFfmpegDetail = ffmpegDetail;
+            final boolean finalStorageOk = storageOk;
+            final String finalStorageMsg = storageMsg;
+            final boolean finalNetworkOk = networkOk;
+            final String finalNetworkMsg = networkMsg;
+            final boolean finalCookieOk = cookieOk;
+            final String finalCookieMsg = cookieMsg;
 
             // 在主线程处理结果
             mainHandler.post(() -> {
                 setButtonsEnabled(true);
                 dismissLoadingDialog();
 
-                // 显示综合测试结果
-                showTestResultDialog(finalPythonOk, finalPythonVersion, finalYtDlpVersion,
-                        finalFfmpegOk, finalFfmpegDetail);
+                // 显示完整环境检测结果
+                showTestResultDialog(
+                        finalPythonOk,
+                        finalFfmpegOk,
+                        finalStorageOk, finalStorageMsg,
+                        finalNetworkOk, finalNetworkMsg,
+                        finalCookieOk, finalCookieMsg);
             });
         }).start();
     }
@@ -1044,37 +1261,65 @@ public class HomeFragment extends Fragment {
     }
 
     /*
-     * showTestResultDialog: 显示环境测试结果模态框
-     * 展示 Python/yt-dlp 和 FFmpeg 两个环境的检测结果。
-     * 每个检测项独立显示状态（✓ 或 ✗），让用户清晰了解哪部分有问题。
+     * showTestResultDialog: 显示完整环境测试结果模态框
+     * 展示五项环境检查结果：Python、FFmpeg、存储目录、网络、Cookie
+     * 每项单独显示成功/失败状态
      */
-    private void showTestResultDialog(boolean pythonOk, String pythonVersion,
-                                       String ytDlpVersion, boolean ffmpegOk,
-                                       String ffmpegDetail) {
-        // 构建详细检测结果文本
+    private void showTestResultDialog(
+            boolean pythonOk,
+            boolean ffmpegOk,
+            boolean storageOk, String storageMsg,
+            boolean networkOk, String networkMsg,
+            boolean cookieOk, String cookieMsg) {
+        // 构建检测结果文本
         StringBuilder detailBuilder = new StringBuilder();
 
-        // Python / yt-dlp 检测结果
+        // 1. Python / yt-dlp 检测结果
         detailBuilder.append(pythonOk ? "✓" : "✗")
-                .append(" Python 环境: ").append(pythonOk ? "正常" : "异常").append("\n");
-        if (!pythonVersion.isEmpty()) {
-            detailBuilder.append("   版本: ").append(pythonVersion).append("\n");
-        }
-        if (!ytDlpVersion.isEmpty()) {
-            detailBuilder.append("   yt-dlp: ").append(ytDlpVersion).append("\n");
-        }
+                .append(" Python环境: ")
+                .append(pythonOk ? "正常" : "异常").append("\n");
 
-        // FFmpeg 检测结果
+        // 2. FFmpeg 检测结果
         detailBuilder.append(ffmpegOk ? "✓" : "✗")
-                .append(" FFmpeg: ").append(ffmpegOk ? "已就绪" : "未就绪").append("\n");
-        if (ffmpegOk && !ffmpegDetail.isEmpty()) {
-            detailBuilder.append("   ").append(ffmpegDetail.replace("\n", "\n   ")).append("\n");
-        } else if (!ffmpegOk) {
-            detailBuilder.append("   分离流视频将无音频\n");
+                .append(" FFmpeg: ")
+                .append(ffmpegOk ? "已就绪" : "未就绪");
+        if (!ffmpegOk) {
+            detailBuilder.append("（分离流视频将无音频）");
         }
+        detailBuilder.append("\n");
 
-        boolean allOk = pythonOk && ffmpegOk;
-        String summary = allOk ? "环境一切正常！" : "部分环境未就绪，请查看详情。";
+        // 3. 存储目录检测结果
+        detailBuilder.append(storageOk ? "✓" : "✗")
+                .append(" 存储目录: ")
+                .append(storageOk ? "正常" : "异常");
+        if (storageMsg != null && !storageMsg.isEmpty()) {
+            detailBuilder.append("（").append(storageMsg).append("）");
+        }
+        detailBuilder.append("\n");
+
+        // 4. 网络连通性检测结果
+        detailBuilder.append(networkOk ? "✓" : "✗")
+                .append(" 网络连接: ")
+                .append(networkOk ? "正常" : "异常");
+        if (networkMsg != null && !networkMsg.isEmpty()) {
+            detailBuilder.append("（").append(networkMsg).append("）");
+        }
+        detailBuilder.append("\n");
+
+        // 5. Cookie 文件状态检测结果
+        detailBuilder.append(cookieOk ? "✓" : "—")
+                .append(" Cookie配置: ")
+                .append(cookieMsg != null ? cookieMsg : "未知")
+                .append("\n");
+
+        // 计算是否全部通过（Cookie 为可选，不计入全部通过条件）
+        boolean allCriticalOk = pythonOk && ffmpegOk && storageOk && networkOk;
+        String summary;
+        if (allCriticalOk) {
+            summary = "核心环境一切正常！";
+        } else {
+            summary = "部分环境未就绪，请检查后重试。";
+        }
 
         // 创建布局：标题 + 详细内容
         LinearLayout layout = new LinearLayout(requireContext());
@@ -1086,7 +1331,7 @@ public class HomeFragment extends Fragment {
         titleView.setText(summary);
         titleView.setTextSize(17);
         titleView.setTextColor(getResources().getColor(
-                allOk ? R.color.success_green : R.color.error_text, null));
+                allCriticalOk ? R.color.success_green : R.color.error_text));
         titleView.setGravity(android.view.Gravity.CENTER);
         titleView.setPadding(0, 0, 0, 16);
 
@@ -1095,7 +1340,7 @@ public class HomeFragment extends Fragment {
         detailView.setText(detailBuilder.toString());
         detailView.setTextSize(14);
         detailView.setTextColor(getResources().getColor(
-                allOk ? R.color.success_green : R.color.error_text, null));
+                allCriticalOk ? R.color.success_green : R.color.error_text));
         detailView.setGravity(android.view.Gravity.START);
 
         layout.addView(titleView);

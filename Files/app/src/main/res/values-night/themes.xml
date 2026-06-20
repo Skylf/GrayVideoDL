@@ -1,7 +1,15 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!--
+     * themes.xml (values-night)
+     * 暗色模式主题 - 与白天主题使用相同的主色，保证全局一致
+     * 防止降级到 Material3 默认紫色
+     -->
     <style name="Base.Theme.GrayVideoDL" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <!-- 主色：与白天主题一致，蓝色 -->
+        <item name="colorPrimary">@color/theme_primary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- 表面上的文字色 -->
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
     </style>
 </resources>

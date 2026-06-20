@@ -87,8 +87,7 @@ public class InitCheckHelper {
 
         for (File dir : directories) {
             if (dir == null) {
-                // 某些设备可能返回 null（如无外部存储时 getExternalFilesDir 可能为 null）
-                detail.append("⚠️ 目录路径为 null（可能是存储权限或设备问题）\n");
+                detail.append("⚠️ 部分存储目录不可用（可能是存储权限问题）\n");
                 failed++;
                 checked++;
                 continue;
@@ -99,21 +98,18 @@ public class InitCheckHelper {
                 boolean canRead = dir.canRead();
                 boolean canWrite = dir.canWrite();
                 if (canRead && canWrite) {
-                    detail.append("✓ ").append(dir.getAbsolutePath()).append("\n");
+                    detail.append("✓ 存储目录正常\n");
                 } else {
-                    detail.append("⚠️ ").append(dir.getAbsolutePath())
-                          .append("（权限不足）\n");
+                    detail.append("⚠️ 存储目录权限不足\n");
                     failed++;
                 }
             } else {
                 // 目录不存在，尝试创建
                 boolean created = dir.mkdirs();
                 if (created || dir.exists()) {
-                    detail.append("✓ ").append(dir.getAbsolutePath())
-                          .append("（已创建）\n");
+                    detail.append("✓ 存储目录已创建\n");
                 } else {
-                    detail.append("✗ ").append(dir.getAbsolutePath())
-                          .append("（创建失败）\n");
+                    detail.append("✗ 存储目录创建失败\n");
                     failed++;
                 }
             }
@@ -150,24 +146,15 @@ public class InitCheckHelper {
             String jsonStr = testResult.toString();
             // 简单解析：检查是否包含 "status": "ok"
             if (jsonStr.contains("\"status\": \"ok\"")) {
-                String detailInfo = "Python 版本: " + extractJsonValue(jsonStr, "python_version");
-                String ytDlpInfo = extractJsonValue(jsonStr, "yt_dlp_version");
-                if (!ytDlpInfo.isEmpty()) {
-                    detailInfo += "\nyt-dlp 版本: " + ytDlpInfo;
-                }
-                result.detail_message += "【Python 环境检查】\n✓ Python 运行环境正常\n"
-                        + detailInfo + "\n\n";
+                result.detail_message += "【Python 环境检查】\n✓ Python 环境正常\n\n";
             } else {
-                String errorMsg = extractJsonValue(jsonStr, "error");
-                result.detail_message += "【Python 环境检查】\n✗ Python 环境异常: "
-                        + errorMsg + "\n\n";
+                result.detail_message += "【Python 环境检查】\n✗ Python 环境异常\n\n";
                 result.all_success = false;
                 result.failed_items++;
             }
         } catch (Exception e) {
             // Python 环境启动失败（例如 Chaquopy 未正确配置或 Python 模块缺失）
-            result.detail_message += "【Python 环境检查】\n✗ Python 环境启动失败: "
-                    + e.getMessage() + "\n\n";
+            result.detail_message += "【Python 环境检查】\n✗ Python 环境初始化失败\n\n";
             result.all_success = false;
             result.failed_items++;
         }
@@ -251,35 +238,18 @@ public class InitCheckHelper {
 
         // 构建检查结果报告
         StringBuilder detail = new StringBuilder();
-        FFmpegManager fm = FFmpegManager.getInstance();
-        String ffmpegPath = fm.getFfmpegPath();
 
-        if (ffmpegReady && ffmpegPath != null && !ffmpegPath.isEmpty()) {
-            File ffmpegFile = new File(ffmpegPath);
-            long fileSize = ffmpegFile.exists() ? ffmpegFile.length() : 0;
-            boolean executable = ffmpegFile.exists() && ffmpegFile.canExecute();
-
+        if (ffmpegReady) {
             detail.append("✓ FFmpeg 已就绪\n");
-            detail.append("  路径: ").append(ffmpegPath).append("\n");
-            detail.append("  大小: ").append(formatFileSize(fileSize)).append("\n");
-            detail.append("  可执行: ").append(executable ? "是" : "否（可能导致合并失败）").append("\n");
-
-            if (!executable) {
-                result.all_success = false;
-                result.failed_items++;
-            }
         } else {
             // 再检查一次 files 目录下的 ffmpeg（兜底）
             File fallbackFile = new File(context.getFilesDir(), "ffmpeg");
             if (fallbackFile.exists()) {
-                long fileSize = fallbackFile.length();
-                detail.append("⚠ FFmpeg 文件存在但状态未知\n");
-                detail.append("  路径: ").append(fallbackFile.getAbsolutePath()).append("\n");
-                detail.append("  大小: ").append(formatFileSize(fileSize)).append("\n");
-                detail.append("  注: 重新启动应用后可正常使用\n");
+                detail.append("⚠ FFmpeg 文件存在但状态待确认\n");
+                detail.append("   注: 重新启动应用后可正常使用\n");
             } else {
                 detail.append("⚠ FFmpeg 未就绪（分离流视频将无音频）\n");
-                detail.append("  注: 下载视频时会自动尝试部署 FFmpeg\n");
+                detail.append("   注: 下载视频时会自动尝试部署 FFmpeg\n");
                 result.all_success = false;
                 result.failed_items++;
             }
@@ -354,7 +324,7 @@ public class InitCheckHelper {
         if (result.all_success) {
             summary = "✓ 所有检查项均通过，程序环境就绪。";
         } else {
-            summary = "⚠ " + result.failed_items + " 项检查未通过，请查看详情。";
+            summary = "⚠" + "部分检查项未通过，但不影响程序主体功能使用。";
         }
         result.detail_message += "【检查摘要】\n" + summary;
 

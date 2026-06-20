@@ -22,7 +22,6 @@ public class DownloadTask {
     public static final String STATUS_DOWNLOADING = "downloading";
     public static final String STATUS_COMPLETED = "completed";
     public static final String STATUS_FAILED = "failed";
-    public static final String STATUS_PAUSED = "paused";
 
     private String id;            // 唯一 ID
     private String url;           // 视频链接
@@ -180,7 +179,6 @@ public class DownloadTask {
     public void setProgress(int progress) { this.progress = progress; }
     public boolean isCompleted() { return STATUS_COMPLETED.equals(status); }
     public boolean isFailed() { return STATUS_FAILED.equals(status); }
-    public boolean isPaused() { return STATUS_PAUSED.equals(status); }
     public boolean isDownloading() { return STATUS_DOWNLOADING.equals(status); }
 
     /*
@@ -194,9 +192,8 @@ public class DownloadTask {
             case STATUS_COMPLETED:
                 return "已完成";
             case STATUS_FAILED:
-                return "失败: " + (error != null ? error : "未知错误");
-            case STATUS_PAUSED:
-                return "已暂停";
+                String err = error != null ? error : "未知错误";
+                return "失败: " + err;
             default:
                 return status;
         }

@@ -247,7 +247,7 @@ public class MainActivity extends AppCompatActivity {
 
     /*
      * showInitCheckDialog: 展示初始化检查结果的自动隐藏模态对话框
-     * 使用自定义布局展示检查状态图标、标题和详细结果，
+     * 仅显示简洁的文字性表述，不包含具体版本号或路径信息
      * 3 秒后自动关闭，用户也可手动点击关闭。
      * @param result 初始化检查结果对象
      */
@@ -264,19 +264,18 @@ public class MainActivity extends AppCompatActivity {
         TextView tvTitle = dialogView.findViewById(R.id.tv_check_title);
         TextView tvDetail = dialogView.findViewById(R.id.tv_check_detail);
 
-        // 根据检查结果设置状态图标和标题
+        // 根据检查结果设置状态图标和简洁文字说明
         if (result.all_success) {
             tvIcon.setText("✓");
             tvIcon.setBackgroundResource(R.drawable.circle_bg_green); // 绿色背景 — 成功
-            tvTitle.setText("初始化检查通过");
+            tvTitle.setText("Python环境初始化成功");
+            tvDetail.setText("所有环境检查已通过，程序可正常使用。");
         } else {
             tvIcon.setText("✗");
             tvIcon.setBackgroundResource(R.drawable.circle_bg_red); // 红色背景 — 失败
-            tvTitle.setText("初始化检查完成");
+            tvTitle.setText("环境初始化完成");
+            tvDetail.setText("部分环境未就绪，但不影响主体功能使用。");
         }
-
-        // 设置检查详情文本
-        tvDetail.setText(result.detail_message);
 
         // 创建 AlertDialog 并设置为模态
         AlertDialog dialog = new AlertDialog.Builder(this)

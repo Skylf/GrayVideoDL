@@ -31,12 +31,12 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
 
     /*
      * 任务操作回调接口
-     * 暂停/继续：根据当前状态切换
+     * 取消：取消正在下载的任务
      * 删除：移除任务和文件
      * 打开文件夹：打开下载文件所在目录
      */
     public interface OnTaskActionListener {
-        void onPauseResume(DownloadTask task);
+        void onCancel(DownloadTask task);
         void onDelete(DownloadTask task);
         void onOpenFolder(DownloadTask task);
     }
@@ -104,8 +104,8 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         // 状态文本（下载中百分比 / 已完成 / 失败原因 / 已暂停）
         private TextView tvStatus;
 
-        // 暂停/继续切换按钮
-        private MaterialButton btnPauseResume;
+        // 取消任务按钮（原暂停按钮）
+        private MaterialButton btnCancel;
 
         // 删除任务按钮
         private MaterialButton btnDelete;
@@ -117,7 +117,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
         private TextView tvDownloadPath;
 
         // "打开"文字按钮
-        private TextView tvOpenFolder;
+        private MaterialButton tvOpenFolder;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -128,7 +128,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
             tvSpeedSize = itemView.findViewById(R.id.tv_speed_size);
             progressBar = itemView.findViewById(R.id.progress_bar);
             tvStatus = itemView.findViewById(R.id.tv_task_status);
-            btnPauseResume = itemView.findViewById(R.id.btn_pause_resume);
+            btnCancel = itemView.findViewById(R.id.btn_pause_resume);
             btnDelete = itemView.findViewById(R.id.btn_delete);
             layoutDownloadPath = itemView.findViewById(R.id.layout_download_path);
             tvDownloadPath = itemView.findViewById(R.id.tv_download_path);
@@ -137,8 +137,8 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
 
         /*
          * bind: 将 DownloadTask 数据绑定到列表项控件
-         * 根据任务状态动态显示/隐藏进度条、切换暂停/继续按钮
-         * 显示下载路径并提供打开文件夹功能
+         * 根据任务状态动态控制控件显隐
+         * 下载中显示取消按钮、进度条等
          */
         void bind(final DownloadTask task, final OnTaskActionListener listener) {
             // 设置基本信息
@@ -151,48 +151,42 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
             tvStatus.setText(task.getStatusText());
 
             if (DownloadTask.STATUS_DOWNLOADING.equals(status)) {
-                // 下载中：显示进度条、速度/大小文本和暂停按钮
+                // 下载中：显示进度条、速度/大小文本和取消按钮
                 progressBar.setVisibility(View.VISIBLE);
                 progressBar.setProgress(task.getProgress());
-                btnPauseResume.setVisibility(View.VISIBLE);
-                btnPauseResume.setText("暂停");
+                btnCancel.setVisibility(View.VISIBLE);
+                btnCancel.setText("取消");
                 // 设置下载速度和已下载/总大小
                 setSpeedSizeText(task);
-
-            } else if (DownloadTask.STATUS_PAUSED.equals(status)) {
-                // 已暂停：保留进度条（显示当前进度）、速度/大小文本，显示继续按钮
-                progressBar.setVisibility(View.VISIBLE);
-                progressBar.setProgress(task.getProgress());
-                btnPauseResume.setVisibility(View.VISIBLE);
-                btnPauseResume.setText("继续");
-                // 已暂停时仍然显示已下载的大小信息
-                setSpeedSizeText(task);
+                tvStatus.setTextColor(
+                        itemView.getContext() .getColor(
+                                android.R.color.darker_gray));
 
             } else if (DownloadTask.STATUS_COMPLETED.equals(status)) {
-                // 已完成：隐藏进度条、速度/大小文本和暂停按钮
+                // 已完成：隐藏进度条、速度/大小文本和取消按钮
                 progressBar.setVisibility(View.GONE);
                 tvSpeedSize.setVisibility(View.GONE);
-                btnPauseResume.setVisibility(View.GONE);
+                btnCancel.setVisibility(View.GONE);
                 tvStatus.setTextColor(
                         itemView.getContext().getColor(
                                 android.R.color.holo_green_dark));
 
             } else if (DownloadTask.STATUS_FAILED.equals(status)) {
-                // 失败：隐藏进度条、速度/大小文本和暂停按钮
+                // 失败：隐藏进度条、速度/大小文本和取消按钮
                 progressBar.setVisibility(View.GONE);
                 tvSpeedSize.setVisibility(View.GONE);
-                btnPauseResume.setVisibility(View.GONE);
+                btnCancel.setVisibility(View.GONE);
                 tvStatus.setTextColor(
                         itemView.getContext().getColor(
                                 android.R.color.holo_red_dark));
             }
 
-            // 暂停/继续按钮点击事件
-            btnPauseResume.setOnClickListener(new View.OnClickListener() {
+            // 取消按钮点击事件
+            btnCancel.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     if (listener != null) {
-                        listener.onPauseResume(task);
+                        listener.onCancel(task);
                     }
                 }
             });

@@ -10,10 +10,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="8dp"
-    app:cardElevation="2dp"
+    app:cardElevation="1dp"
     app:cardCornerRadius="8dp"
     app:strokeWidth="1dp"
-    app:strokeColor="@color/chip_unselected_bg"
+    app:strokeColor="@color/card_border"
     android:padding="12dp">
 
     <LinearLayout
@@ -45,14 +45,14 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textSize="12sp"
-                android:textColor="#FF666666" />
+                android:textColor="@color/text_secondary" />
 
             <TextView
                 android:id="@+id/tv_task_filesize"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="#FF666666" />
+                android:textColor="@color/text_secondary" />
         </LinearLayout>
 
         <!-- 第三行：进度条（仅下载中和暂停中显示） -->
@@ -73,7 +73,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:textSize="11sp"
-            android:textColor="#FF888888"
+            android:textColor="@color/text_tertiary"
             android:visibility="gone" />
 
         <!-- 第五行：下载路径（可点击打开文件夹） -->
@@ -103,18 +103,27 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textSize="10sp"
-                android:textColor="#FF888888"
+                android:textColor="@color/text_tertiary"
                 android:maxLines="1"
                 android:ellipsize="middle" />
 
-            <TextView
+            <!-- 打开按钮（带边框样式） -->
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/tv_open_folder"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="32dp"
+                android:minWidth="0dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:minWidth="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/text_secondary"
                 android:textSize="11sp"
-                android:textColor="?attr/colorPrimary"
-                android:text="打开"
-                android:layout_marginStart="4dp" />
+                android:textColor="@color/text_secondary"
+                android:text="打开" />
         </LinearLayout>
 
         <!-- 第五行：状态 + 操作按钮 -->
@@ -132,31 +141,44 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textSize="12sp"
-                android:textColor="#FF999999" />
+                android:textColor="@color/text_tertiary" />
 
-            <!-- 暂停/继续按钮 -->
+            <!-- 取消按钮（带边框样式） -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_pause_resume"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
-                android:textSize="12sp"
                 android:minWidth="0dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 app:minWidth="0dp"
-                android:text="暂停"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/status_error"
+                android:textSize="13sp"
+                android:textColor="@color/status_error"
+                android:text="取消"
                 android:visibility="gone" />
 
-            <!-- 删除按钮 -->
+            <!-- 删除按钮（带边框样式） -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
-                android:textSize="12sp"
                 android:minWidth="0dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 app:minWidth="0dp"
-                android:text="删除"
-                android:textColor="@color/error_text" />
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/status_error"
+                android:textSize="13sp"
+                android:textColor="@color/status_error"
+                android:text="删除" />
         </LinearLayout>
 
     </LinearLayout>

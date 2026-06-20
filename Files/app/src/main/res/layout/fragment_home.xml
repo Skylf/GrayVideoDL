@@ -34,8 +34,7 @@
             android:layout_height="wrap_content"
             android:text="✓"
             android:textSize="18sp"
-            android:textColor="@color/success_green"
-            android:textStyle="bold" />
+            android:textColor="@color/status_success" />
 
         <TextView
             android:id="@+id/tv_success_text"
@@ -44,7 +43,7 @@
             android:layout_marginStart="8dp"
             android:text="解析成功"
             android:textSize="15sp"
-            android:textColor="@color/success_green" />
+            android:textColor="@color/status_success" />
 
     </LinearLayout>
 
@@ -71,8 +70,7 @@
             android:layout_height="wrap_content"
             android:text="⚠"
             android:textSize="18sp"
-            android:textColor="@color/warning_text"
-            android:textStyle="bold" />
+            android:textColor="@color/status_warning" />
 
         <TextView
             android:id="@+id/tv_platform_warning_text"
@@ -81,7 +79,7 @@
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:textSize="14sp"
-            android:textColor="@color/warning_text"
+            android:textColor="@color/status_warning"
             android:lineSpacingExtra="2dp" />
 
     </LinearLayout>
@@ -218,7 +216,7 @@
             android:layout_height="wrap_content"
             android:text="⚠ "
             android:textSize="16sp"
-            android:textColor="@color/warning_text" />
+            android:textColor="@color/status_warning" />
 
         <TextView
             android:id="@+id/tv_warning_text"
@@ -227,7 +225,7 @@
             android:layout_weight="1"
             android:layout_marginStart="4dp"
             android:textSize="13sp"
-            android:textColor="@color/warning_text"
+            android:textColor="@color/status_warning"
             android:lineSpacingExtra="2dp" />
 
     </LinearLayout>
@@ -371,7 +369,7 @@
                 android:visibility="gone"
                 app:cardElevation="2dp"
                 app:contentPadding="16dp"
-                app:strokeColor="@color/error_border"
+                app:strokeColor="@color/status_error_border"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
@@ -385,7 +383,7 @@
                         android:text="解析失败"
                         android:textSize="15sp"
                         android:textStyle="bold"
-                        android:textColor="@color/error_text" />
+                        android:textColor="@color/status_error" />
 
                     <TextView
                         android:id="@+id/tv_error_detail"
@@ -393,7 +391,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:textSize="13sp"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
+                        android:textColor="@color/text_secondary" />
 
                 </LinearLayout>
 

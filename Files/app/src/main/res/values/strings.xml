@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">GrayVideoDL</string>
+    <string name="app_name">灰度视频下载器</string>
     <!-- 首页 -->
     <string name="tab_home">首页</string>
     <string name="tab_download">下载</string>
@@ -20,7 +20,7 @@
     <string name="merge_desc">合并后为完整音画同步文件</string>
     <string name="quality_label">默认画质</string>
     <string name="version_label">版本</string>
-    <string name="version_value">v1.0.0</string>
+    <string name="version_value">v0.7A</string>
     <!-- 通用提示 -->
     <string name="toast_input_empty">请先输入视频链接</string>
     <string name="toast_parsing">正在解析</string>

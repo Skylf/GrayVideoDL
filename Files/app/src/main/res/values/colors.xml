@@ -1,17 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+ * colors.xml
+ * 统一颜色体系 - 全局 UI 颜色资源
+ * 所有页面引用同一套颜色，保证风格一致
+ -->
 <resources>
+    <!-- ========== 基础色 ========== -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <!-- 错误卡片 -->
+
+    <!-- ========== 主题色（与 Material3 主题对齐） ========== -->
+    <!-- 主色：用作标题、强调、开关激活 -->
+    <color name="theme_primary">#FF1976D2</color>
+    <!-- 主色背景淡色：选中状态 -->
+    <color name="theme_primary_bg">#FFE3F2FD</color>
+
+    <!-- ========== 文字颜色（三级层级） ========== -->
+    <!-- 主要文字色：标题、关键信息 -->
+    <color name="text_primary">#FF1C1B1F</color>
+    <!-- 次要文字色：说明、辅助信息 -->
+    <color name="text_secondary">#FF49454F</color>
+    <!-- 弱化文字色：次要数据、时间、大小等 -->
+    <color name="text_tertiary">#FF9E9E9E</color>
+
+    <!-- ========== 卡片颜色 ========== -->
+    <!-- 卡片背景 -->
+    <color name="card_bg">#FFFFFFFF</color>
+    <!-- 卡片边框 -->
+    <color name="card_border">#FFE0E0E0</color>
+    <!-- 卡片选中边框 -->
+    <color name="card_selected_border">#FF1976D2</color>
+    <!-- 卡片选中背景 -->
+    <color name="card_selected_bg">#FFE3F2FD</color>
+
+    <!-- ========== 状态色 ========== -->
+    <!-- 成功 -->
+    <color name="status_success">#FF4CAF50</color>
+    <color name="status_success_bg">#FFE8F5E9</color>
+    <!-- 警告 -->
+    <color name="status_warning">#FFE65100</color>
+    <color name="status_warning_bg">#FFFFF3E0</color>
+    <!-- 错误 -->
+    <color name="status_error">#FFD32F2F</color>
+    <color name="status_error_border">#FFE57373</color>
+    <color name="status_error_bg">#FFFFEBEE</color>
+
+    <!-- ========== 兼容旧引用（保留旧名称指向新色，不破坏现有代码） ========== -->
+    <!-- 旧 error_border → status_error_border -->
     <color name="error_border">#FFE57373</color>
     <color name="error_text">#FFD32F2F</color>
-    <!-- 格式选择 -->
+    <!-- 旧选中色 → 新 theme 色 -->
     <color name="chip_selected_bg">#FFE3F2FD</color>
     <color name="chip_unselected_bg">#FFF5F5F5</color>
-    <!-- 成功提示 -->
+    <!-- 旧成功色 → 新 status 色 -->
     <color name="success_green">#FF4CAF50</color>
     <color name="success_bg">#FFE8F5E9</color>
-    <!-- 画质警告 -->
+    <!-- 旧警告色 → 新 status 色 -->
     <color name="warning_text">#FFE65100</color>
     <color name="warning_bg">#FFFFF3E0</color>
+
+    <!-- ========== 解析结果表格样式 ========== -->
+    <!-- 表头文字色 -->
+    <color name="table_header_text">#FF546E7A</color>
+    <!-- 表头背景色 -->
+    <color name="table_header_bg">#FFF0F4F8</color>
+    <!-- 表格行默认边框（加深） -->
+    <color name="table_card_border">#FFBDBDBD</color>
+    <!-- 表格行默认背景 -->
+    <color name="table_card_bg">#FFFFFFFF</color>
+    <!-- 选中边框（加深） -->
+    <color name="table_selected_border">#FF1565C0</color>
+    <!-- 选中背景（加深） -->
+    <color name="table_selected_bg">#FFBBDEFB</color>
+    <!-- 行内主文字色 -->
+    <color name="table_text_primary">#FF424242</color>
+    <!-- 行内次要文字色 -->
+    <color name="table_text_secondary">#FF757575</color>
+    <!-- 音频行背景色 -->
+    <color name="table_audio_bg">#FFFDF5E6</color>
 </resources>

@@ -73,11 +73,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
-            android:lineSpacingExtra="2dp"
+            android:lineSpacingExtra="4dp"
             android:text="等待操作..."
             android:textSize="12sp"
             android:textColor="?attr/colorOnSurface"
-            android:textIsSelectable="true" />
+            android:textIsSelectable="true"
+            android:includeFontPadding="false" />
 
     </ScrollView>
 

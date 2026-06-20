@@ -64,7 +64,7 @@ public class DownloadFragment extends Fragment
     private TextView tvEmptyDownload;
 
     // FFmpeg 警告浮层布局，显示音视频合并失败警告
-    private LinearLayout layoutFfmpegWarningToast;
+    private com.google.android.material.card.MaterialCardView layoutFfmpegWarningToast;
 
     // FFmpeg 警告浮层文本，显示具体警告内容
     private TextView tvFfmpegWarningText;
@@ -103,7 +103,7 @@ public class DownloadFragment extends Fragment
         rvDownloadList = view.findViewById(R.id.rv_download_list);
         tvEmptyDownload = view.findViewById(R.id.tv_empty_download);
         // FFmpeg 警告浮层控件
-        layoutFfmpegWarningToast = view.findViewById(R.id.layout_ffmpeg_warning_toast);
+        layoutFfmpegWarningToast = view.findViewById(R.id.card_ffmpeg_warning_toast);
         tvFfmpegWarningText = view.findViewById(R.id.tv_ffmpeg_warning_text);
         mainHandler = new Handler(Looper.getMainLooper());
         runningDownloads = new HashMap<>();
@@ -294,11 +294,10 @@ public class DownloadFragment extends Fragment
         public void run() {
             if (!isRefreshing) return;
 
-            // 检查是否有活动的下载或暂停任务
+            // 检查是否有活动的下载任务
             boolean hasActiveTasks = false;
             for (DownloadTask task : taskList) {
-                if (DownloadTask.STATUS_DOWNLOADING.equals(task.getStatus())
-                        || DownloadTask.STATUS_PAUSED.equals(task.getStatus())) {
+                if (DownloadTask.STATUS_DOWNLOADING.equals(task.getStatus())) {
                     hasActiveTasks = true;
                     break;
                 }
@@ -354,23 +353,54 @@ public class DownloadFragment extends Fragment
     // ===================== 操作回调实现 =====================
 
     /*
-     * onPauseResume: 暂停/继续按钮点击回调
-     * 根据任务当前状态切换：下载中→暂停，已暂停→继续
+     * onCancel: 取消按钮点击回调
+     * 取消正在下载的任务，标记为失败并显示"已取消"
      */
     @Override
-    public void onPauseResume(DownloadTask task) {
-        if (DownloadTask.STATUS_DOWNLOADING.equals(task.getStatus())) {
-            // 下载中 → 暂停：创建取消标志文件
-            pauseDownload(task);
-        } else if (DownloadTask.STATUS_PAUSED.equals(task.getStatus())) {
-            // 已暂停 → 继续：重新启动下载
-            resumeDownload(task);
+    public void onCancel(DownloadTask task) {
+        // 确认取消对话框
+        new AlertDialog.Builder(requireContext())
+                .setTitle("取消下载")
+                .setMessage("确定要取消" +
+                        (task.getTitle() != null ? "「" + task.getTitle() + "」" : "") +
+                        "的下载吗？")
+                .setPositiveButton("确定取消", (dialog, which) -> {
+                    cancelDownload(task);
+                })
+                .setNegativeButton("继续下载", null)
+                .show();
+    }
+
+    /*
+     * cancelDownload: 取消指定任务的下载
+     * 创建取消标志文件让 Python 端停止下载，然后将任务标记为失败
+     */
+    private void cancelDownload(DownloadTask task) {
+        // 创建取消标志文件
+        File cancelFlag = new File(requireContext().getCacheDir(),
+                task.getCancelFileName());
+        try {
+            cancelFlag.createNewFile();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // 移除线程跟踪
+        runningDownloads.remove(task.getId());
+
+        // 更新任务状态为失败（已取消）
+        int index = findTaskIndexById(task.getId());
+        if (index >= 0) {
+            taskList.get(index).setStatus(DownloadTask.STATUS_FAILED);
+            taskList.get(index).setError("已取消");
+            adapter.notifyItemChanged(index);
+            saveTasks();
         }
     }
 
     /*
      * onDelete: 删除按钮点击回调
-     * 如果任务正在下载，先暂停再删除文件
+     * 如果任务正在下载，先取消再删除文件
      */
     @Override
     public void onDelete(DownloadTask task) {
@@ -386,61 +416,6 @@ public class DownloadFragment extends Fragment
                 })
                 .setNegativeButton("取消", null)
                 .show();
-    }
-
-    /*
-     * pauseDownload: 暂停指定任务的下载
-     * 创建取消标志文件，Python 的 progress_hook 检测到后自动停止
-     */
-    private void pauseDownload(DownloadTask task) {
-        // 创建取消标志文件
-        File cancelFlag = new File(requireContext().getCacheDir(),
-                task.getCancelFileName());
-        try {
-            cancelFlag.createNewFile();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        // 更新任务状态为暂停
-        int index = findTaskIndexById(task.getId());
-        if (index >= 0) {
-            taskList.get(index).setStatus(DownloadTask.STATUS_PAUSED);
-            adapter.notifyItemChanged(index);
-            saveTasks();
-        }
-
-        // 移除线程跟踪（线程将自行检测到 cancel flag 后退出）
-        runningDownloads.remove(task.getId());
-    }
-
-    /*
-     * resumeDownload: 继续暂停的下载任务
-     * 重新启动下载线程，调用 Python 的 downloadVideoWithProgress
-     */
-    private void resumeDownload(DownloadTask task) {
-        // 更新状态为下载中
-        int index = findTaskIndexById(task.getId());
-        if (index < 0) return;
-
-        taskList.get(index).setStatus(DownloadTask.STATUS_DOWNLOADING);
-        adapter.notifyItemChanged(index);
-        saveTasks();
-
-        // 启动自动刷新
-        startAutoRefresh();
-
-        // 在新线程中执行下载
-        final DownloadTask taskCopy = task;
-        Thread downloadThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                executeDownload(taskCopy);
-            }
-        });
-        downloadThread.setDaemon(true);
-        downloadThread.start();
-        runningDownloads.put(task.getId(), downloadThread);
     }
 
     /*
@@ -762,9 +737,11 @@ public class DownloadFragment extends Fragment
                         }
 
                     } else if ("paused".equals(status)) {
-                        // 用户暂停
+                        // 用户取消下载
                         taskList.get(idx).setStatus(
-                                DownloadTask.STATUS_PAUSED);
+                                DownloadTask.STATUS_FAILED);
+                        taskList.get(idx).setError("已取消");
+                        Log.i(TAG_FF_MEDIA, "Download: 下载已被用户取消");
 
                     } else {
                         // 下载失败

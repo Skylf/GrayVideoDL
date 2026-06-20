@@ -32,7 +32,7 @@
         android:text="初始化检查"
         android:textSize="18sp"
         android:textStyle="bold"
-        android:textColor="@android:color/black" />
+        android:textColor="@color/text_primary" />
 
     <!-- 结果详情 -->
     <TextView
@@ -41,6 +41,6 @@
         android:layout_height="wrap_content"
         android:lineSpacingExtra="4dp"
         android:textSize="14sp"
-        android:textColor="#FF555555" />
+        android:textColor="@color/text_secondary" />
 
 </LinearLayout>

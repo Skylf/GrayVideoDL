@@ -1,8 +1,23 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!--
+     * themes.xml
+     * 统一应用主题 - Material3 DayNight NoActionBar
+     * 定义主题色使全局样式一致（白天/夜晚均指向同一蓝色主色）
+     -->
     <style name="Base.Theme.GrayVideoDL" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- 主色：按钮、强调文本、激活状态（蓝色） -->
+        <item name="colorPrimary">@color/theme_primary</item>
+        <!-- 主色上的文字色 -->
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- 表面色：卡片、容器背景 -->
+        <item name="colorSurface">@color/white</item>
+        <!-- 表面上的文字色 -->
+        <item name="colorOnSurface">@color/text_primary</item>
+        <!-- 表面上的次要文字色 -->
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <!-- 轮廓色：卡片边框、分隔线 -->
+        <item name="colorOutline">@color/card_border</item>
+        <item name="colorOutlineVariant">#FFE8E8E8</item>
     </style>
 
     <style name="Theme.GrayVideoDL" parent="Base.Theme.GrayVideoDL" />
