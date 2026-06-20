@@ -43,11 +43,17 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.Deflater;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class DownloadFragment extends Fragment
         implements DownloadAdapter.OnTaskActionListener {
@@ -451,8 +457,9 @@ public class DownloadFragment extends Fragment
 
     /*
      * onShare: 分享已下载的文件
-     * 通过系统 Intent.ACTION_SEND 弹出应用选择器，让用户选择微信、QQ 等应用接收文件。
-     * 使用 FileProvider 生成 content:// URI 确保 Android 7.0+ 跨应用文件访问。
+     * 弹出选择对话框让用户选择"分享原视频"还是"压缩后分享"。
+     * 选择压缩后分享时，先在后台线程将视频压缩为 ZIP 包再分享，
+     * 避免微信等应用对视频二次压缩导致画质损失。
      */
     @Override
     public void onShare(DownloadTask task) {
@@ -462,13 +469,35 @@ public class DownloadFragment extends Fragment
             showToast("文件路径不存在");
             return;
         }
-        File file = new File(filePath);
-        if (!file.exists()) {
+        final File videoFile = new File(filePath);
+        if (!videoFile.exists()) {
             showToast("文件已被删除");
             return;
         }
 
-        // 根据文件扩展名获取 MIME 类型
+        // 弹出选择对话框，让用户选择分享方式
+        // 提示：选择"压缩后分享"将视频打包为 ZIP 再发送，可避免微信等应用二次压缩导致画质损失
+        new AlertDialog.Builder(requireContext())
+                .setTitle("分享方式")
+                .setMessage("分享原视频：直接发送原始视频文件\n压缩后分享：打包为 ZIP 压缩包再发送\n\n提示：压缩包分享可避免微信等应用压缩画质，接收方解压后即可获得原始视频。")
+                .setPositiveButton("分享原视频", (dialogInterface, which) -> shareFile(videoFile))
+                .setNegativeButton("压缩后分享", (dialogInterface, which) -> compressAndShare(videoFile))
+                .setNeutralButton("取消", null)
+                .show();
+    }
+
+    /*
+     * shareFile: 通用文件分享方法
+     * 通过 FileProvider 生成 content:// URI 并调用系统 Intent.ACTION_SEND 分享文件。
+     * 适用于分享原视频文件或压缩后的 ZIP 压缩包。
+     * @param file 要分享的文件
+     */
+    private void shareFile(File file) {
+        if (file == null || !file.exists()) {
+            showToast("文件不存在");
+            return;
+        }
+        // 根据文件名获取 MIME 类型
         String mimeType = getMimeType(file.getName());
         // 通过 FileProvider 生成 content:// URI，确保跨应用可读
         Uri fileUri = getUriForFile(requireContext(), file);
@@ -482,6 +511,85 @@ public class DownloadFragment extends Fragment
 
         // 弹出系统应用选择器
         startActivity(Intent.createChooser(shareIntent, "分享到..."));
+    }
+
+    /*
+     * compressAndShare: 异步压缩视频并分享
+     * 在后台线程中使用 ZipOutputStream 将视频文件压缩为 ZIP 包，
+     * 压缩完成后回到主线程调用 shareFile 分享生成的压缩包。
+     * 压缩包存放在应用缓存目录（getCacheDir()），系统会在存储空间不足时自动清理。
+     * @param videoFile 要压缩的视频文件
+     */
+    private void compressAndShare(File videoFile) {
+        // 显示压缩提示，避免用户重复点击
+        Toast.makeText(getContext(), "正在压缩视频，请稍候...", Toast.LENGTH_LONG).show();
+
+        // 在后台线程执行压缩，避免阻塞 UI
+        new Thread(() -> {
+            try {
+                // 生成压缩包路径（放在缓存目录，避免占用用户存储空间）
+                File cacheDir = requireContext().getCacheDir();
+                String zipName = videoFile.getName()
+                        .replaceFirst("\\.[^.]+$", "") + ".zip";
+                File zipFile = new File(cacheDir, zipName);
+
+                // 如果缓存中已存在同名压缩包则删除旧文件
+                if (zipFile.exists()) {
+                    zipFile.delete();
+                }
+
+                // 执行压缩
+                compressFileToZip(videoFile, zipFile);
+
+                // 压缩完成，回到主线程分享
+                requireActivity().runOnUiThread(() -> {
+                    Toast.makeText(getContext(), "压缩完成，正在分享", Toast.LENGTH_SHORT).show();
+                    shareFile(zipFile);
+                    // 压缩包保留在缓存目录，可多次分享；系统会在存储空间不足时自动清理
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                requireActivity().runOnUiThread(() ->
+                        Toast.makeText(getContext(),
+                                "压缩失败: " + e.getMessage(),
+                                Toast.LENGTH_SHORT).show()
+                );
+            }
+        }).start();
+    }
+
+    /*
+     * compressFileToZip: 将单个文件压缩为 ZIP 格式
+     * 使用 java.util.zip.ZipOutputStream 实现标准 ZIP 压缩，
+     * 设置 Deflater.DEFAULT_COMPRESSION 压缩级别，在压缩比和速度间取得平衡。
+     * 采用 8KB 缓冲区分块读写，避免大文件导致内存溢出。
+     * @param sourceFile 源文件
+     * @param zipFile 目标 ZIP 文件
+     * @throws IOException 压缩过程中发生 IO 错误时抛出
+     */
+    private void compressFileToZip(File sourceFile, File zipFile) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(zipFile);
+             ZipOutputStream zos = new ZipOutputStream(fos)) {
+
+            // 设置压缩级别（0-9，9为最大压缩但耗时，DEFAULT_COMPRESSION 为折中）
+            zos.setLevel(Deflater.DEFAULT_COMPRESSION);
+
+            // 创建 ZIP 条目，使用源文件名（不含路径）
+            String fileName = sourceFile.getName();
+            ZipEntry zipEntry = new ZipEntry(fileName);
+            zos.putNextEntry(zipEntry);
+
+            // 读取源文件数据并写入压缩流（8KB 缓冲区）
+            try (FileInputStream fis = new FileInputStream(sourceFile)) {
+                byte[] buffer = new byte[8192];
+                int length;
+                while ((length = fis.read(buffer)) > 0) {
+                    zos.write(buffer, 0, length);
+                }
+            }
+            zos.closeEntry();
+        }
     }
 
     /*
@@ -1137,6 +1245,7 @@ public class DownloadFragment extends Fragment
      * @return MIME 类型字符串，未知类型返回 &#42;&#47;&#42;（通用通配符）
      */
     private String getMimeType(String fileName) {
+        if (fileName.endsWith(".zip")) return "application/zip";
         if (fileName.endsWith(".mp4")) return "video/mp4";
         if (fileName.endsWith(".mkv")) return "video/x-matroska";
         if (fileName.endsWith(".webm")) return "video/webm";

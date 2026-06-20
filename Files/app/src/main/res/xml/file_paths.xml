@@ -13,4 +13,8 @@
     <files-path
         name="internal_files"
         path="/" />
+    <!-- 缓存目录路径，用于分享压缩包（放在缓存目录避免占用用户存储空间） -->
+    <cache-path
+        name="cache"
+        path="/" />
 </paths>
