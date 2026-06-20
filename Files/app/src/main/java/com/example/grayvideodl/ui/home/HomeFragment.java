@@ -33,6 +33,7 @@ import com.chaquo.python.android.AndroidPlatform;
 import android.os.Environment;
 
 import com.example.grayvideodl.R;
+import com.example.grayvideodl.FFmpegManager;
 import com.example.grayvideodl.model.DownloadTask;
 import com.example.grayvideodl.model.LogBuffer;
 import com.example.grayvideodl.model.VideoInfo;
@@ -46,7 +47,12 @@ import com.google.android.material.textfield.TextInputEditText;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class HomeFragment extends Fragment {
 
@@ -56,6 +62,27 @@ public class HomeFragment extends Fragment {
     // ========== 控件声明 ==========
     private TextInputEditText etUrlInput;
     private MaterialButton btnParse, btnTestEnv, btnDownload;
+
+    /*
+     * URL_PATTERN: 用于从用户输入的文本中提取链接的正则表达式。
+     * 支持 http/https 协议，匹配 URL 中常见的合法字符，
+     * 确保结尾不以标点符号结束（避免匹配到句尾的句号/逗号）。
+     */
+    private static final Pattern URL_PATTERN = Pattern.compile(
+            "https?://[-A-Za-z0-9+&@#/%?=~_|!:,.;]*[-A-Za-z0-9+&@#/%=~_|]");
+
+    /*
+     * PLATFORMS_WITHOUT_EXTRACTOR: yt-dlp 没有内置提取器的平台集合。
+     * 这些平台的链接只能使用 yt-dlp 的通用提取器（generic extractor）进行解析，
+     * 成功率较低。检测到用户输入这些平台的链接时，弹出警告提示。
+     * 如需添加更多平台，在此集合中新增对应的 PLATFORM_* 常量即可。
+     */
+    private static final Set<String> PLATFORMS_WITHOUT_EXTRACTOR = new HashSet<>(
+            Arrays.asList(
+                    // 快手：yt-dlp 无专用提取器，通用提取器通常只能获取部分信息或失败
+                    PlatformCookieManager.PLATFORM_KUAISHOU
+                    // 后续发现其他无内置提取器的平台，在此追加
+            ));
 
     // 结果卡片
     private MaterialCardView cardResult, cardError;
@@ -68,6 +95,10 @@ public class HomeFragment extends Fragment {
 
     // 成功提示浮层
     private LinearLayout layoutSuccessToast;
+
+    // 平台兼容性警告浮层
+    private LinearLayout layoutPlatformWarningToast;
+    private TextView tvPlatformWarningText;
 
     // 画质警告横幅
     private LinearLayout layoutQualityWarning;
@@ -135,6 +166,10 @@ public class HomeFragment extends Fragment {
 
         layoutSuccessToast = view.findViewById(R.id.layout_success_toast);
 
+        // 平台兼容性警告浮层
+        layoutPlatformWarningToast = view.findViewById(R.id.layout_platform_warning_toast);
+        tvPlatformWarningText = view.findViewById(R.id.tv_platform_warning_text);
+
         // 画质警告横幅
         layoutQualityWarning = view.findViewById(R.id.layout_quality_warning);
         tvWarningText = view.findViewById(R.id.tv_warning_text);
@@ -166,15 +201,48 @@ public class HomeFragment extends Fragment {
 
     /* -------------------------- 解析逻辑 -------------------------- */
 
+    /*
+     * onParseClick: 解析按钮点击处理。
+     * 处理流程:
+     *   1. 从输入框中获取原始文本
+     *   2. 使用正则表达式从中提取链接（支持用户输入包含链接的一段话）
+     *   3. 检测链接对应的平台是否为 yt-dlp 无内置提取器的平台（如快手）
+     *   4. 若为无内置提取器平台，弹出自动消失的模态警告
+     *   5. 进行重复解析检测
+     *   6. 调用 doParse 执行解析
+     */
     private void onParseClick() {
-        String url = etUrlInput.getText().toString().trim();
-        if (url.isEmpty()) {
+        // 步骤1: 获取输入框原始文本
+        String rawInput = etUrlInput.getText().toString().trim();
+        if (rawInput.isEmpty()) {
             showToast("请先输入视频链接");
             appendLog("错误：链接为空");
             return;
         }
 
-        // 重复解析检测
+        // 步骤2: 使用正则表达式从输入文本中提取链接
+        String url = extractUrlFromInput(rawInput);
+        if (url == null) {
+            // 未在输入中找到有效的 http/https 链接
+            showToast("未找到有效的视频链接，请检查输入");
+            appendLog("错误：输入中未找到有效链接 - " + rawInput);
+            return;
+        }
+
+        // 若提取出的链接与原文本不同（说明输入中包含了额外文字），提示用户已自动提取
+        if (!url.equals(rawInput)) {
+            showToast("已自动提取链接");
+            appendLog("从输入中提取链接: " + url);
+        }
+
+        // 步骤3: 检测链接对应的平台是否为 yt-dlp 无内置提取器的平台
+        String platform = PlatformCookieManager.detectPlatform(url);
+        if (PLATFORMS_WITHOUT_EXTRACTOR.contains(platform)) {
+            // 步骤4: 对于无内置提取器的平台，弹出自动消失的模态警告
+            showUnsupportedPlatformWarning(getPlatformDisplayName(platform));
+        }
+
+        // 步骤5: 重复解析检测
         if (url.equals(lastParsedUrl)) {
             // URL 与上次相同，弹出确认对话框
             new AlertDialog.Builder(requireContext())
@@ -188,7 +256,128 @@ public class HomeFragment extends Fragment {
             return;
         }
 
+        // 步骤6: 执行解析
         doParse(url);
+    }
+
+    /*
+     * extractUrlFromInput: 使用正则表达式从用户输入的文本中提取链接。
+     * 支持用户粘贴包含链接的一段话（如"看看这个视频 https://xxx.com 怎么样"），
+     * 自动从中提取出有效的 http/https 链接。
+     *
+     * @param input 用户输入的原始文本
+     * @return 提取出的第一个有效链接，若未找到则返回 null
+     */
+    private String extractUrlFromInput(String input) {
+        if (input == null || input.isEmpty()) {
+            return null;
+        }
+        // 使用预编译的正则表达式匹配链接
+        Matcher matcher = URL_PATTERN.matcher(input.trim());
+        if (matcher.find()) {
+            // 获取匹配到的链接
+            String url = matcher.group();
+            
+            // 额外验证：确保URL以http/https开头
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                // 移除末尾可能的引号、反引号或其他特殊字符
+                url = url.replaceAll("[\"'`\\s]+$", "");
+                return url;
+            }
+        }
+        return null;
+    }
+
+    /*
+     * showUnsupportedPlatformWarning: 显示"平台暂未独立支持"的自动消失浮层警告。
+     * 当检测到用户输入的链接属于 yt-dlp 没有内置提取器的平台（如快手）时调用，
+     * 提示用户只能使用通用提取器，成功率较低。
+     * 警告浮层会在 6 秒后自动消失，样式与解析成功提示框一致。
+     *
+     * @param platformName 平台的中文显示名称
+     */
+    private void showUnsupportedPlatformWarning(String platformName) {
+        // 构建警告消息：包含平台名称和风险提示
+        String warningMessage = platformName + " 暂未独立支持，只能使用通用提取器，大概率会失败";
+
+        // 设置警告文本
+        tvPlatformWarningText.setText(warningMessage);
+
+        // 显示浮层并执行渐显动画
+        layoutPlatformWarningToast.setVisibility(View.VISIBLE);
+        layoutPlatformWarningToast.setAlpha(0f);
+
+        // 渐显动画（400ms）
+        AlphaAnimation fadeIn = new AlphaAnimation(0f, 1f);
+        fadeIn.setDuration(400);
+        layoutPlatformWarningToast.startAnimation(fadeIn);
+        layoutPlatformWarningToast.setAlpha(1f);
+
+        // 6 秒后渐隐消失
+        mainHandler.postDelayed(() -> {
+            AlphaAnimation fadeOut = new AlphaAnimation(1f, 0f);
+            fadeOut.setDuration(600);
+            fadeOut.setAnimationListener(new Animation.AnimationListener() {
+                @Override public void onAnimationStart(Animation a) {}
+                @Override public void onAnimationRepeat(Animation a) {}
+                @Override public void onAnimationEnd(Animation a) {
+                    layoutPlatformWarningToast.setVisibility(View.GONE);
+                }
+            });
+            layoutPlatformWarningToast.startAnimation(fadeOut);
+            layoutPlatformWarningToast.setAlpha(0f);
+        }, 6000);
+    }
+
+    /*
+     * hidePlatformWarningToast: 隐藏平台兼容性警告浮层
+     */
+    private void hidePlatformWarningToast() {
+        layoutPlatformWarningToast.setVisibility(View.GONE);
+        layoutPlatformWarningToast.setAlpha(0f);
+    }
+
+    /*
+     * getPlatformDisplayName: 将平台标识常量转换为用户可读的中文显示名称。
+     * 用于在警告提示框中向用户展示当前检测到的平台名称。
+     *
+     * @param platform 平台标识常量（PlatformCookieManager 中的 PLATFORM_*）
+     * @return 平台的中文显示名称，未知平台返回原值
+     */
+    private String getPlatformDisplayName(String platform) {
+        if (platform == null) {
+            return "未知";
+        }
+        switch (platform) {
+            case PlatformCookieManager.PLATFORM_BILIBILI:
+                return "Bilibili（哔哩哔哩）";
+            case PlatformCookieManager.PLATFORM_DOUYIN:
+                return "抖音";
+            case PlatformCookieManager.PLATFORM_KUAISHOU:
+                return "快手";
+            case PlatformCookieManager.PLATFORM_YOUTUBE:
+                return "YouTube";
+            case PlatformCookieManager.PLATFORM_TIKTOK:
+                return "TikTok";
+            case PlatformCookieManager.PLATFORM_TWITTER:
+                return "Twitter / X";
+            case PlatformCookieManager.PLATFORM_INSTAGRAM:
+                return "Instagram";
+            case PlatformCookieManager.PLATFORM_WEIBO:
+                return "微博";
+            case PlatformCookieManager.PLATFORM_XIAOHONGSHU:
+                return "小红书";
+            case PlatformCookieManager.PLATFORM_VQQ:
+                return "腾讯视频";
+            case PlatformCookieManager.PLATFORM_IQIYI:
+                return "爱奇艺";
+            case PlatformCookieManager.PLATFORM_YOUKU:
+                return "优酷";
+            case PlatformCookieManager.PLATFORM_TWITCH:
+                return "Twitch";
+            default:
+                return platform;
+        }
     }
 
     /*
@@ -198,6 +387,13 @@ public class HomeFragment extends Fragment {
     private void doParse(String url) {
         // 记录本次解析的 URL
         lastParsedUrl = url;
+
+        // 检测抖音图文链接（URL包含 /note/），图文没有视频资源，无法解析
+        if (url.contains("/note/") || url.contains("douyin.com/note")) {
+            showImageTextWarning("抖音");
+            appendLog("检测到抖音图文链接，无法提取视频资源: " + url);
+            return;
+        }
 
         cardResult.setVisibility(View.GONE);
         cardError.setVisibility(View.GONE);
@@ -225,11 +421,64 @@ public class HomeFragment extends Fragment {
                     showVideoInfo(currentVideoInfo);
                     showSuccessToast();
                 } else {
-                    showError(currentVideoInfo.getError());
+                    // 检测解析错误是否为 Unsupported URL（可能是图文链接）
+                    String error = currentVideoInfo.getError();
+                    if (error != null && error.contains("Unsupported URL")) {
+                        // 再次检测是否为抖音链接
+                        if (url.contains("douyin.com")) {
+                            showImageTextWarning("抖音");
+                            appendLog("解析失败：Unsupported URL，可能是图文链接");
+                        } else {
+                            showError(error);
+                        }
+                    } else {
+                        showError(error);
+                    }
                 }
                 appendLog("解析结果:\n" + result);
             });
         }).start();
+    }
+
+    /*
+     * showImageTextWarning: 显示"图文链接无视频资源"的橙色警告浮层。
+     * 当检测到用户输入的链接为图文（如抖音图文）时调用，
+     * 提示用户该链接不存在视频资源，无法下载。
+     * 警告浮层会在 6 秒后自动消失。
+     *
+     * @param platformName 平台的中文显示名称
+     */
+    private void showImageTextWarning(String platformName) {
+        // 构建警告消息：图文链接无视频资源
+        String warningMessage = "无法提取视频资源！该链接为" + platformName + "图文，不存在视频资源";
+
+        // 设置警告文本
+        tvPlatformWarningText.setText(warningMessage);
+
+        // 显示浮层并执行渐显动画
+        layoutPlatformWarningToast.setVisibility(View.VISIBLE);
+        layoutPlatformWarningToast.setAlpha(0f);
+
+        // 渐显动画（400ms）
+        AlphaAnimation fadeIn = new AlphaAnimation(0f, 1f);
+        fadeIn.setDuration(400);
+        layoutPlatformWarningToast.startAnimation(fadeIn);
+        layoutPlatformWarningToast.setAlpha(1f);
+
+        // 6 秒后渐隐消失
+        mainHandler.postDelayed(() -> {
+            AlphaAnimation fadeOut = new AlphaAnimation(1f, 0f);
+            fadeOut.setDuration(600);
+            fadeOut.setAnimationListener(new Animation.AnimationListener() {
+                @Override public void onAnimationStart(Animation a) {}
+                @Override public void onAnimationRepeat(Animation a) {}
+                @Override public void onAnimationEnd(Animation a) {
+                    layoutPlatformWarningToast.setVisibility(View.GONE);
+                }
+            });
+            layoutPlatformWarningToast.startAnimation(fadeOut);
+            layoutPlatformWarningToast.setAlpha(0f);
+        }, 6000);
     }
 
     /*
@@ -573,6 +822,20 @@ public class HomeFragment extends Fragment {
     /* -------------------------- 成功提示浮层 -------------------------- */
 
     private void showSuccessToast() {
+        // 如果警告浮层正在显示，延迟显示成功提示（等待警告消失）
+        if (layoutPlatformWarningToast.getVisibility() == View.VISIBLE) {
+            // 警告浮层显示6秒后消失，延迟7秒后再显示成功提示
+            mainHandler.postDelayed(this::showSuccessToastInternal, 7000);
+            return;
+        }
+        
+        showSuccessToastInternal();
+    }
+
+    /**
+     * 显示成功提示浮层（内部方法）
+     */
+    private void showSuccessToastInternal() {
         layoutSuccessToast.setVisibility(View.VISIBLE);
         layoutSuccessToast.setAlpha(0f);
 
@@ -618,26 +881,66 @@ public class HomeFragment extends Fragment {
         showLoadingDialog("正在测试环境...");
 
         new Thread(() -> {
+            // ========== 1. 检测 Python / yt-dlp 环境 ==========
             String envInfo = callPythonFunction("testEnvironment", "");
-            appendLog("环境检测结果:\n" + envInfo);
+            appendLog("Python 环境检测结果:\n" + envInfo);
+
+            // 解析 Python 检测结果
+            boolean pythonOk = false;
+            String pythonVersion = "";
+            String ytDlpVersion = "";
+            try {
+                JSONObject json = new JSONObject(envInfo);
+                pythonOk = json.optBoolean("yt_dlp_installed", false)
+                        && "ok".equals(json.optString("status", ""));
+                pythonVersion = json.optString("python_version", "");
+                ytDlpVersion = json.optString("yt_dlp_version", "");
+            } catch (Exception ignored) {
+            }
+
+            // ========== 2. 检测 FFmpeg 环境 ==========
+            FFmpegManager ffManager = FFmpegManager.getInstance();
+            boolean ffmpegOk = ffManager.isFfmpegAvailable();
+            String ffmpegPath = ffManager.getFfmpegPath();
+            String ffmpegSize = "";
+            String ffmpegDetail = "";
+
+            if (ffmpegOk && ffmpegPath != null && !ffmpegPath.isEmpty()) {
+                File ffmpegFile = new File(ffmpegPath);
+                if (ffmpegFile.exists()) {
+                    ffmpegSize = formatFileSizeForEnv(ffmpegFile.length());
+                }
+                ffmpegDetail = "路径: " + ffmpegPath + "\n大小: " + ffmpegSize;
+                appendLog("FFmpeg 环境正常: " + ffmpegPath);
+            } else {
+                // 尝试检查 files 目录
+                File fallbackFile = new File(requireContext().getFilesDir(), "ffmpeg");
+                if (fallbackFile.exists()) {
+                    ffmpegOk = true;
+                    ffmpegPath = fallbackFile.getAbsolutePath();
+                    ffmpegSize = formatFileSizeForEnv(fallbackFile.length());
+                    ffmpegDetail = "路径: " + ffmpegPath + "\n大小: " + ffmpegSize;
+                    appendLog("FFmpeg 文件存在（状态待确认）: " + ffmpegPath);
+                } else {
+                    ffmpegDetail = "FFmpeg 未就绪（分离流视频将无音频）";
+                    appendLog("FFmpeg 未就绪");
+                }
+            }
+
+            final boolean finalPythonOk = pythonOk;
+            final String finalPythonVersion = pythonVersion;
+            final String finalYtDlpVersion = ytDlpVersion;
+            final boolean finalFfmpegOk = ffmpegOk;
+            final String finalFfmpegDetail = ffmpegDetail;
 
             // 在主线程处理结果
             mainHandler.post(() -> {
                 setButtonsEnabled(true);
                 dismissLoadingDialog();
 
-                // 解析 JSON 判断是否成功
-                boolean isSuccess = false;
-                try {
-                    JSONObject json = new JSONObject(envInfo);
-                    // yt-dlp 已安装且状态为 ok 即为成功
-                    isSuccess = json.optBoolean("yt_dlp_installed", false)
-                            && "ok".equals(json.optString("status", ""));
-                } catch (Exception ignored) {
-                }
-
-                // 显示测试结果模态框
-                showTestResultDialog(isSuccess);
+                // 显示综合测试结果
+                showTestResultDialog(finalPythonOk, finalPythonVersion, finalYtDlpVersion,
+                        finalFfmpegOk, finalFfmpegDetail);
             });
         }).start();
     }
@@ -686,13 +989,26 @@ public class HomeFragment extends Fragment {
      */
     private void startDownload(VideoInfo.Format format) {
         // 创建下载任务记录
+        // 注意：使用 extractUrlFromInput 从原始输入中提取纯链接，避免将非URL内容传给yt-dlp
+        String rawInput = etUrlInput.getText().toString().trim();
+        String extractedUrl = extractUrlFromInput(rawInput);
+        // 如果提取到链接则使用提取后的链接，否则回退使用原始输入
+        String finalUrl = (extractedUrl != null) ? extractedUrl : rawInput;
+        Log.d(TAG, "startDownload: 原始输入=" + rawInput + ", 提取后URL=" + finalUrl);
+
         final DownloadTask task = new DownloadTask();
-        task.setUrl(etUrlInput.getText().toString().trim());
+        task.setUrl(finalUrl);
         task.setTitle(currentVideoInfo.getTitle());
         task.setFormatId(format.getFormatId());
         task.setResolution(format.getResolutionDisplay());
-        // 设置下载目录路径（用于在下载列表中显示和打开文件夹）
-        task.setDownloadDir(getDownloadDirectory(requireContext()).getAbsolutePath());
+        // 设置下载目录路径为公共目录（用于在下载列表中显示和打开文件夹）
+        // 文件会先下载到私有目录，然后复制到公共目录，所以显示公共目录路径
+        String publicDownloadDir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS).getAbsolutePath()
+                + "/GrayVideoDL";
+        task.setDownloadDir(publicDownloadDir);
+        Log.d(TAG, "startDownload: 任务URL=" + task.getUrl()
+                + ", downloadDir=" + publicDownloadDir);
 
         Log.d(TAG, "startDownload: 创建下载任务 id=" + task.getId()
                 + ", title=" + task.getTitle()
@@ -729,31 +1045,82 @@ public class HomeFragment extends Fragment {
 
     /*
      * showTestResultDialog: 显示环境测试结果模态框
-     * 成功：绿色背景 + "✅ 环境测试成功！"
-     * 失败：红色背景 + "❌ 环境测试失败！"
+     * 展示 Python/yt-dlp 和 FFmpeg 两个环境的检测结果。
+     * 每个检测项独立显示状态（✓ 或 ✗），让用户清晰了解哪部分有问题。
      */
-    private void showTestResultDialog(boolean isSuccess) {
-        // 构建消息文本和颜色
-        String message = isSuccess ? "✅ 环境测试成功！" : "❌ 环境测试失败！";
-        int bgColor = getResources().getColor(
-                isSuccess ? R.color.success_bg : R.color.error_border, null);
-        int textColor = getResources().getColor(
-                isSuccess ? R.color.success_green : R.color.error_text, null);
+    private void showTestResultDialog(boolean pythonOk, String pythonVersion,
+                                       String ytDlpVersion, boolean ffmpegOk,
+                                       String ffmpegDetail) {
+        // 构建详细检测结果文本
+        StringBuilder detailBuilder = new StringBuilder();
 
-        // 创建一个带颜色的消息布局
-        TextView messageView = new TextView(requireContext());
-        messageView.setText(message);
-        messageView.setTextSize(18);
-        messageView.setTextColor(textColor);
-        messageView.setGravity(android.view.Gravity.CENTER);
-        messageView.setPadding(32, 24, 32, 24);
-        messageView.setBackgroundColor(bgColor);
+        // Python / yt-dlp 检测结果
+        detailBuilder.append(pythonOk ? "✓" : "✗")
+                .append(" Python 环境: ").append(pythonOk ? "正常" : "异常").append("\n");
+        if (!pythonVersion.isEmpty()) {
+            detailBuilder.append("   版本: ").append(pythonVersion).append("\n");
+        }
+        if (!ytDlpVersion.isEmpty()) {
+            detailBuilder.append("   yt-dlp: ").append(ytDlpVersion).append("\n");
+        }
+
+        // FFmpeg 检测结果
+        detailBuilder.append(ffmpegOk ? "✓" : "✗")
+                .append(" FFmpeg: ").append(ffmpegOk ? "已就绪" : "未就绪").append("\n");
+        if (ffmpegOk && !ffmpegDetail.isEmpty()) {
+            detailBuilder.append("   ").append(ffmpegDetail.replace("\n", "\n   ")).append("\n");
+        } else if (!ffmpegOk) {
+            detailBuilder.append("   分离流视频将无音频\n");
+        }
+
+        boolean allOk = pythonOk && ffmpegOk;
+        String summary = allOk ? "环境一切正常！" : "部分环境未就绪，请查看详情。";
+
+        // 创建布局：标题 + 详细内容
+        LinearLayout layout = new LinearLayout(requireContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 28, 40, 20);
+
+        // 标题：总体状态
+        TextView titleView = new TextView(requireContext());
+        titleView.setText(summary);
+        titleView.setTextSize(17);
+        titleView.setTextColor(getResources().getColor(
+                allOk ? R.color.success_green : R.color.error_text, null));
+        titleView.setGravity(android.view.Gravity.CENTER);
+        titleView.setPadding(0, 0, 0, 16);
+
+        // 详细内容
+        TextView detailView = new TextView(requireContext());
+        detailView.setText(detailBuilder.toString());
+        detailView.setTextSize(14);
+        detailView.setTextColor(getResources().getColor(
+                allOk ? R.color.success_green : R.color.error_text, null));
+        detailView.setGravity(android.view.Gravity.START);
+
+        layout.addView(titleView);
+        layout.addView(detailView);
 
         // 弹出模态框
         new android.app.AlertDialog.Builder(requireContext())
-                .setView(messageView)
+                .setView(layout)
                 .setPositiveButton("知道了", null)
                 .show();
+    }
+
+    /**
+     * formatFileSizeForEnv: 将字节数格式化为可读的文件大小文本（供环境检测使用）
+     * @param bytes 文件字节数
+     * @return 格式化后的字符串，如 "14.8 MB"
+     */
+    private String formatFileSizeForEnv(long bytes) {
+        if (bytes <= 0) return "未知";
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.0f KB", bytes / 1024.0);
+        if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
+        }
+        return String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
     }
 
     private String callPythonFunction(String name, String param) {

@@ -11,6 +11,7 @@ import android.app.Application;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 /*
  * GrayVideoDLApp: 应用的 Application 入口
@@ -30,6 +31,9 @@ public class GrayVideoDLApp extends Application {
     // 检查是否已完成（包括正在检查中和已完成）
     private static boolean s_check_completed = false;
 
+    // 日志标签
+    private static final String TAG = "GrayVideoDLApp";
+
     /*
      * onCreate: 应用启动时的入口方法
      * 判断是否为首次运行，若是则在后台线程执行初始化检查
@@ -37,6 +41,9 @@ public class GrayVideoDLApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // 初始化 FFmpeg（必须在主线程）
+        initializeFfmpeg();
 
         // 读取首次运行标记
         SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
@@ -49,6 +56,29 @@ public class GrayVideoDLApp extends Application {
             // 非首次运行，直接标记检查已完成（无需展示对话框）
             s_check_completed = true;
         }
+    }
+
+    /*
+     * initializeFfmpeg: 初始化 FFmpeg 管理器
+     * 在后台线程中搜索设备上的 FFmpeg 或检查本地是否已有下载好的文件，
+     * 不阻塞主线程。
+     * 如果设备上找不到 FFmpeg，不会自动下载（避免首次启动耗时过长），
+     * 而是在用户执行下载时通过 FFmpegManager.downloadFfmpeg() 触发。
+     */
+    private void initializeFfmpeg() {
+        Log.d(TAG, "初始化 FFmpeg 管理器（异步检查）...");
+        FFmpegManager.getInstance().initialize(this);
+
+        // 延迟一小段时间后检查 FFmpeg 是否就绪（本地已有或系统已有）
+        // 用于日志输出
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (FFmpegManager.getInstance().isFfmpegAvailable()) {
+                Log.d(TAG, "FFmpeg 已就绪，路径: "
+                        + FFmpegManager.getInstance().getFfmpegPath());
+            } else {
+                Log.d(TAG, "FFmpeg 未就绪（设备上不存在），需要首次使用时下载");
+            }
+        }, 500);
     }
 
     /*

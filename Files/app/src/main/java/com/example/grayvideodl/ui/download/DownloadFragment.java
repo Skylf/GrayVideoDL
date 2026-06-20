@@ -17,6 +17,9 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.Animation;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,6 +33,7 @@ import com.chaquo.python.Python;
 import com.chaquo.python.PyObject;
 import com.chaquo.python.android.AndroidPlatform;
 import com.example.grayvideodl.R;
+import com.example.grayvideodl.FFmpegManager;
 import com.example.grayvideodl.PlatformCookieManager;
 import com.example.grayvideodl.model.DownloadTask;
 import com.example.grayvideodl.ui.settings.BilibiliLoginDialog;
@@ -50,11 +54,20 @@ public class DownloadFragment extends Fragment
     // 日志标签，用于调试下载列表加载和显示问题
     private static final String TAG = "DownloadFlow";
 
+    // 额外的 Logcat 标签，用于与 Python 端统一过滤音频合并相关日志
+    private static final String TAG_FF_MEDIA = "FF-media";
+
     // 下载列表 RecyclerView，用于展示下载任务列表
     private RecyclerView rvDownloadList;
 
     // 空状态提示文本，当没有下载任务时显示
     private TextView tvEmptyDownload;
+
+    // FFmpeg 警告浮层布局，显示音视频合并失败警告
+    private LinearLayout layoutFfmpegWarningToast;
+
+    // FFmpeg 警告浮层文本，显示具体警告内容
+    private TextView tvFfmpegWarningText;
 
     // RecyclerView 适配器
     private DownloadAdapter adapter;
@@ -89,6 +102,9 @@ public class DownloadFragment extends Fragment
         // 初始化控件和数据结构
         rvDownloadList = view.findViewById(R.id.rv_download_list);
         tvEmptyDownload = view.findViewById(R.id.tv_empty_download);
+        // FFmpeg 警告浮层控件
+        layoutFfmpegWarningToast = view.findViewById(R.id.layout_ffmpeg_warning_toast);
+        tvFfmpegWarningText = view.findViewById(R.id.tv_ffmpeg_warning_text);
         mainHandler = new Handler(Looper.getMainLooper());
         runningDownloads = new HashMap<>();
 
@@ -429,21 +445,40 @@ public class DownloadFragment extends Fragment
 
     /*
      * onOpenFolder: 打开下载文件所在文件夹（回调实现）
-     * 通过系统 Intent 打开文件夹，供用户查看已下载的文件
+     * 通过系统 Intent 打开文件夹，供用户查看已下载的文件。
+     * 注意：始终重定向到公共目录 /storage/emulated/0/Download/GrayVideoDL/，
+     * 因为文件下载后会通过 copyToPublicDownloads 复制到该目录。
+     * 如果传入了私有路径（task.filepath 的父目录），则替换为公共路径。
      */
     @Override
     public void onOpenFolder(DownloadTask task) {
+        // 始终使用公共下载目录路径，因为文件会被复制到那里
+        String publicDir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS).getAbsolutePath()
+                + "/GrayVideoDL";
+        File publicFolder = new File(publicDir);
+        if (publicFolder.exists() && publicFolder.isDirectory()) {
+            Log.d(TAG, "onOpenFolder: 使用公共目录路径: " + publicDir);
+            openFolder(publicDir);
+            return;
+        }
+
+        // 公共目录不存在时，回退到 task 中保存的路径
         String folderPath = task.getFolderToOpen();
         if (folderPath == null || folderPath.isEmpty()) {
             showToast("下载路径不存在");
             return;
         }
+        Log.d(TAG, "onOpenFolder: 使用task中的路径: " + folderPath);
         openFolder(folderPath);
     }
 
     /*
      * openFolder: 通过系统文件管理器打开指定路径的文件夹
-     * 尝试多种方式打开文件夹，兼容不同 Android 版本和文件管理器
+     * 尝试多种方式打开文件夹，兼容不同 Android 版本和文件管理器。
+     * 注意：DocumentsContract.buildTreeDocumentUri 依赖 MediaStore 缓存，
+     * 当文件被外部工具（如MT管理器）删除时，缓存可能过时。因此在用
+     * DocumentsContract 之前，先尝试 file:// URI 以获取实时文件系统状态。
      * @param folderPath 要打开的文件夹绝对路径
      */
     private void openFolder(String folderPath) {
@@ -453,36 +488,102 @@ public class DownloadFragment extends Fragment
                 showToast("文件夹不存在");
                 return;
             }
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
+            // ---- 第一步：触发 MediaStore 重新扫描文件夹，刷新索引缓存 ----
+            // 当文件被外部工具（如MT管理器）修改/删除时，MediaStore 缓存会过时，
+            // 主动扫描可以让 DocumentsProvider 获取到最新状态。
+            scanMediaStore(folder);
+
+            // ---- 第二步：尝试 file:// URI（无MIME类型） ----
+            // 不设置MIME类型，让系统/文件管理器自行推断，某些管理器对无类型URI显示更完整
+            try {
+                Intent rawIntent = new Intent(Intent.ACTION_VIEW);
+                rawIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                rawIntent.setData(android.net.Uri.fromFile(folder));
+                startActivity(rawIntent);
+                Log.d(TAG, "openFolder: file URI（无类型）成功");
+                return;
+            } catch (Exception ignored) {
+                // 某些 Android 版本不支持 file URI 方式，继续尝试
+            }
+
+            // ---- 第三步：尝试 file:// URI（*/* 类型，显示所有文件） ----
+            try {
+                Intent fileIntent = new Intent(Intent.ACTION_VIEW);
+                fileIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                fileIntent.setDataAndType(
+                        android.net.Uri.fromFile(folder), "*/*");
+                startActivity(fileIntent);
+                Log.d(TAG, "openFolder: file URI（*/*）成功");
+                return;
+            } catch (Exception ignored) {
+                // 某些 Android 版本不支持 file URI 方式，继续尝试
+            }
+
+            // ---- 第四步：Android 5+ DocumentsContract 方案（备用） ----
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                // Android 5+：尝试通过 DocumentsContract 打开
                 try {
                     android.net.Uri treeUri = android.provider.DocumentsContract
                             .buildTreeDocumentUri(
                                     "com.android.externalstorage.documents",
                                     "primary:Download/GrayVideoDL");
-                    intent.setDataAndType(treeUri,
+                    Intent docIntent = new Intent(Intent.ACTION_VIEW);
+                    docIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    docIntent.setDataAndType(treeUri,
                             "vnd.android.document/directory");
-                    startActivity(intent);
+                    startActivity(docIntent);
+                    Log.d(TAG, "openFolder: DocumentsContract 成功");
                     return;
-                } catch (Exception ignored) {
-                    // 尝试失败，继续走 file URI 方式
+                } catch (Exception ignored2) {
+                    // 尝试失败，提示用户手动查找
                 }
             }
 
-            // 备用方式：使用 file URI（部分文件管理器支持）
-            intent.setDataAndType(
-                    android.net.Uri.fromFile(folder), "*/*");
-            try {
-                startActivity(intent);
-            } catch (Exception e) {
-                // 如果 file URI 方式也失败，提示用户手动查找
-                showToast("请使用文件管理器打开: " + folderPath);
-            }
+            // ---- 所有方式都失败 ----
+            Log.w(TAG, "openFolder: 所有打开方式均失败，folderPath=" + folderPath);
+            showToast("请使用文件管理器打开: " + folderPath);
         } catch (Exception e) {
+            Log.e(TAG, "openFolder: 异常", e);
             showToast("无法打开文件夹: " + e.getMessage());
+        }
+    }
+
+    /*
+     * scanMediaStore: 触发 MediaStore 重新扫描指定文件夹
+     * 当文件被外部工具修改/删除后，MediaStore 缓存可能过时。
+     * 主动扫描可让 DocumentsProvider 获取最新状态。
+     * @param folder 需要重新扫描的文件夹
+     */
+    private void scanMediaStore(File folder) {
+        try {
+            // 扫描文件夹本身（触发重新索引目录下所有文件）
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                android.media.MediaScannerConnection.scanFile(
+                        requireContext(),
+                        new String[]{folder.getAbsolutePath()},
+                        null,
+                        null);
+            }
+            
+            // 额外扫描文件夹下所有现有文件
+            File[] files = folder.listFiles();
+            if (files != null && files.length > 0) {
+                String[] paths = new String[files.length];
+                for (int i = 0; i < files.length; i++) {
+                    paths[i] = files[i].getAbsolutePath();
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                    android.media.MediaScannerConnection.scanFile(
+                            requireContext(),
+                            paths,
+                            null,
+                            null);
+                }
+            }
+            
+            Log.d(TAG, "scanMediaStore: 触发扫描完成，folder=" + folder.getAbsolutePath());
+        } catch (Exception e) {
+            Log.w(TAG, "scanMediaStore: 触发扫描失败", e);
         }
     }
 
@@ -551,7 +652,24 @@ public class DownloadFragment extends Fragment
                 + ", title=" + task.getTitle()
                 + ", url=" + task.getUrl()
                 + ", formatId=" + task.getFormatId());
+        Log.i(TAG_FF_MEDIA, "Download: 开始下载任务，formatId=" + task.getFormatId()
+                + "，title=" + task.getTitle());
         Context ctx = requireContext();
+
+        // ========== 检查 FFmpeg 可用性，分离流需要 FFmpeg 合并音视频 ==========
+        // 如果 FFmpeg 未就绪，先触发同步下载（阻塞当前后台线程等待完成）
+        FFmpegManager ffManager = FFmpegManager.getInstance();
+        if (!ffManager.isFfmpegAvailable()) {
+            Log.i(TAG_FF_MEDIA, "Download: FFmpeg 未就绪，开始同步下载...");
+            boolean ffmpegDownloaded = ffManager.downloadFfmpegSync();
+            if (ffmpegDownloaded) {
+                Log.i(TAG_FF_MEDIA, "Download: FFmpeg 下载成功，路径=" + ffManager.getFfmpegPath());
+            } else {
+                Log.w(TAG_FF_MEDIA, "Download: FFmpeg 下载失败，分离流视频将无音频");
+            }
+        } else {
+            Log.i(TAG_FF_MEDIA, "Download: FFmpeg 已就绪，路径=" + ffManager.getFfmpegPath());
+        }
 
         // 获取 Cache 目录中的进度文件和取消标志文件路径
         final String progressFilePath = new File(ctx.getCacheDir(),
@@ -601,22 +719,47 @@ public class DownloadFragment extends Fragment
                         // 下载成功
                         taskList.get(idx).setStatus(
                                 DownloadTask.STATUS_COMPLETED);
-                        taskList.get(idx).setFilepath(
-                                result.optString("filepath", ""));
+                        String filepath = result.optString("filepath", "");
                         taskList.get(idx).setProgress(100);
 
-                        // 获取文件大小
-                        String fp = result.optString("filepath", "");
-                        if (!fp.isEmpty()) {
-                            File f = new File(fp);
-                            if (f.exists()) {
-                                taskList.get(idx).setFileSize(f.length());
-                            }
+                        // 检查 FFmpeg 警告（音视频合并失败警告）
+                        boolean ffmpegWarning = result.optBoolean("ffmpeg_warning", false);
+                        String ffmpegWarningMessage = result.optString("ffmpeg_warning_message", "");
+                        if (ffmpegWarning && !ffmpegWarningMessage.isEmpty()) {
+                            Log.w(TAG, "executeDownload: FFmpeg警告 - " + ffmpegWarningMessage);
+                            Log.w(TAG_FF_MEDIA, "FFmpeg警告: " + ffmpegWarningMessage);
+                            // 显示橙色警告浮层
+                            showFfmpegWarningToast(ffmpegWarningMessage);
                         }
 
-                        // 复制到公共目录
-                        copyToPublicDownloads(ctx,
-                                new File(result.optString("filepath", "")));
+                        // 获取文件大小
+                        Log.d(TAG, "executeDownload: 下载成功，filepath=" + filepath);
+                        Log.i(TAG_FF_MEDIA, "Download: 下载成功，filepath=" + filepath
+                                + "，ffmpegWarning=" + ffmpegWarning);
+                        if (!filepath.isEmpty()) {
+                            File f = new File(filepath);
+                            if (f.exists()) {
+                                taskList.get(idx).setFileSize(f.length());
+                                Log.d(TAG, "executeDownload: 文件存在，大小=" + f.length());
+                            } else {
+                                Log.w(TAG, "executeDownload: 文件不存在，filepath=" + filepath);
+                            }
+                        } else {
+                            Log.w(TAG, "executeDownload: filepath为空");
+                        }
+
+                        // 复制到公共目录，并获取公共目录中的文件路径
+                        File sourceFile = new File(filepath);
+                        String publicFilePath = copyToPublicDownloads(ctx, sourceFile);
+                        
+                        // 如果复制成功，更新 filepath 为公共目录路径（用于打开文件夹和显示）
+                        if (publicFilePath != null && !publicFilePath.isEmpty()) {
+                            Log.d(TAG, "executeDownload: 复制到公共目录成功，publicFilePath=" + publicFilePath);
+                            taskList.get(idx).setFilepath(publicFilePath);
+                        } else {
+                            // 复制失败，使用原始路径
+                            taskList.get(idx).setFilepath(filepath);
+                        }
 
                     } else if ("paused".equals(status)) {
                         // 用户暂停
@@ -629,6 +772,8 @@ public class DownloadFragment extends Fragment
                                 DownloadTask.STATUS_FAILED);
                         taskList.get(idx).setError(
                                 result.optString("error", "未知错误"));
+                        Log.e(TAG_FF_MEDIA, "Download: 下载失败，error="
+                                + result.optString("error", "未知错误"));
                     }
 
                     adapter.notifyItemChanged(idx);
@@ -668,7 +813,10 @@ public class DownloadFragment extends Fragment
         final Runnable pollingRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isDone[0]) return; // 下载已完成，停止轮询
+                if (isDone[0]) {
+                    Log.d(TAG, "startProgressPolling: 下载已完成，停止轮询，taskId=" + task.getId());
+                    return; // 下载已完成，停止轮询
+                }
 
                 // 读取进度文件
                 File pf = new File(progressFilePath);
@@ -683,7 +831,11 @@ public class DownloadFragment extends Fragment
                         }
                         br.close();
 
-                        JSONObject progressData = new JSONObject(sb.toString());
+                        String progressContent = sb.toString();
+                        Log.d(TAG, "startProgressPolling: 读取进度文件成功，taskId=" + task.getId()
+                                + ", content=" + progressContent);
+
+                        JSONObject progressData = new JSONObject(progressContent);
                         final int percent = progressData.optInt("percent", 0);
                         final String progStatus = progressData.optString(
                                 "status", "");
@@ -696,12 +848,22 @@ public class DownloadFragment extends Fragment
                         final double speedBytes = progressData.optDouble(
                                 "speed", 0);
 
+                        Log.d(TAG, "startProgressPolling: 解析进度数据，taskId=" + task.getId()
+                                + ", percent=" + percent
+                                + ", downloadedBytes=" + downloadedBytes
+                                + ", totalBytes=" + totalBytes
+                                + ", speed=" + speedBytes
+                                + ", status=" + progStatus);
+
                         // 更新主线程 UI
                         mainHandler.post(new Runnable() {
                             @Override
                             public void run() {
                                 int idx = findTaskIndexById(task.getId());
                                 if (idx >= 0) {
+                                    Log.d(TAG, "startProgressPolling: 更新UI进度，taskId=" + task.getId()
+                                            + ", idx=" + idx
+                                            + ", newProgress=" + percent);
                                     // 更新进度
                                     taskList.get(idx).setProgress(percent);
                                     // 更新下载字节数、总字节数和速度（供适配器显示）
@@ -727,13 +889,20 @@ public class DownloadFragment extends Fragment
                                     }
                                     // 适配器会重新绑定数据，速度+大小由 tv_speed_size 显示
                                     adapter.notifyItemChanged(idx);
+                                    Log.d(TAG, "startProgressPolling: UI更新完成，taskId=" + task.getId()
+                                            + ", statusText=" + statusText);
+                                } else {
+                                    Log.w(TAG, "startProgressPolling: 未找到任务，taskId=" + task.getId());
                                 }
                             }
                         });
 
                     } catch (Exception e) {
-                        // 忽略读取错误
+                        Log.e(TAG, "startProgressPolling: 读取进度文件失败，taskId=" + task.getId(), e);
                     }
+                } else {
+                    Log.d(TAG, "startProgressPolling: 进度文件不存在，taskId=" + task.getId()
+                            + ", path=" + progressFilePath);
                 }
 
                 // 继续轮询
@@ -744,6 +913,8 @@ public class DownloadFragment extends Fragment
         };
 
         // 启动轮询
+        Log.d(TAG, "startProgressPolling: 启动进度轮询，taskId=" + task.getId()
+                + ", progressFilePath=" + progressFilePath);
         pollingHandler.postDelayed(pollingRunnable, 500);
     }
 
@@ -786,9 +957,16 @@ public class DownloadFragment extends Fragment
     /*
      * copyToPublicDownloads: 将下载的文件保存到公共 Download 目录
      * 使用 MediaStore API 确保文件管理器中可见
+     * @return 复制后的公共目录文件路径，失败返回 null
      */
-    private void copyToPublicDownloads(Context context, File sourceFile) {
-        if (sourceFile == null || !sourceFile.exists()) return;
+    private String copyToPublicDownloads(Context context, File sourceFile) {
+        Log.d(TAG, "copyToPublicDownloads: sourceFile="
+                + (sourceFile == null ? "null" : sourceFile.getAbsolutePath()
+                + ", exists=" + sourceFile.exists()));
+        if (sourceFile == null || !sourceFile.exists()) {
+            Log.w(TAG, "copyToPublicDownloads: 源文件不存在，跳过复制");
+            return null;
+        }
 
         try {
             String fileName = sourceFile.getName();
@@ -826,10 +1004,18 @@ public class DownloadFragment extends Fragment
                 values.clear();
                 values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
                 context.getContentResolver().update(uri, values, null, null);
+                
+                // 构建公共目录文件路径并返回
+                String publicPath = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS).getAbsolutePath() 
+                        + "/GrayVideoDL/" + fileName;
+                Log.d(TAG, "copyToPublicDownloads: 复制成功，publicPath=" + publicPath);
+                return publicPath;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "copyToPublicDownloads: 复制失败", e);
         }
+        return null;
     }
 
     /*
@@ -891,5 +1077,43 @@ public class DownloadFragment extends Fragment
         downloadThread.start();
         runningDownloads.put(task.getId(), downloadThread);
         Log.d(TAG, "addExternalTask: 下载线程已启动，taskId=" + task.getId());
+    }
+
+    /*
+     * showFfmpegWarningToast: 显示 FFmpeg 音视频合并失败警告浮层。
+     * 当 FFmpeg 不可用导致无法合并分离的视频流和音频流时调用，
+     * 提示用户下载的视频可能没有音频。
+     * 警告浮层会在 6 秒后自动消失，样式与平台警告浮层一致。
+     *
+     * @param warningMessage 警告消息内容
+     */
+    private void showFfmpegWarningToast(String warningMessage) {
+        // 设置警告文本
+        tvFfmpegWarningText.setText(warningMessage);
+
+        // 显示浮层并执行渐显动画
+        layoutFfmpegWarningToast.setVisibility(View.VISIBLE);
+        layoutFfmpegWarningToast.setAlpha(0f);
+
+        // 渐显动画（400ms）
+        AlphaAnimation fadeIn = new AlphaAnimation(0f, 1f);
+        fadeIn.setDuration(400);
+        layoutFfmpegWarningToast.startAnimation(fadeIn);
+        layoutFfmpegWarningToast.setAlpha(1f);
+
+        // 6 秒后渐隐消失
+        mainHandler.postDelayed(() -> {
+            AlphaAnimation fadeOut = new AlphaAnimation(1f, 0f);
+            fadeOut.setDuration(600);
+            fadeOut.setAnimationListener(new Animation.AnimationListener() {
+                @Override public void onAnimationStart(Animation a) {}
+                @Override public void onAnimationRepeat(Animation a) {}
+                @Override public void onAnimationEnd(Animation a) {
+                    layoutFfmpegWarningToast.setVisibility(View.GONE);
+                }
+            });
+            layoutFfmpegWarningToast.startAnimation(fadeOut);
+            layoutFfmpegWarningToast.setAlpha(0f);
+        }, 6000);
     }
 }

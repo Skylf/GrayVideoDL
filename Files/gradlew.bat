@@ -43,6 +43,10 @@ if not defined JAVA_HOME (
 @rem Set PyPI mirror for pip to use Alibaba Cloud (faster downloads in China)
 set PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 
+@rem Set pip cache directory to project-local folder (avoid polluting user home, speed up rebuilds)
+set PIP_CACHE_DIR=%APP_HOME%\.pip-cache
+if not exist "%PIP_CACHE_DIR%" mkdir "%PIP_CACHE_DIR%"
+
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 

@@ -44,5 +44,11 @@ DL-*-Log.txt
 ks-*.txt
 *.log
 
+## 测试 / 临时文件
+01.txt
+test-video/
+docs/
+yt-dlp*.md
+
 ## 项目说明文档 (Excel 二进制文件保留)
 # ProjectDescription 下的 xlsx 文件保留不排除

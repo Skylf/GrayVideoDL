@@ -48,6 +48,44 @@
 
     </LinearLayout>
 
+    <!-- ========== 平台兼容性警告浮层（初始隐藏，检测到无内置提取器平台时渐显） ========== -->
+    <!-- 固定在顶部，与成功提示浮层重叠显示（elevation更高，显示在上面） -->
+    <LinearLayout
+        android:id="@+id/layout_platform_warning_toast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:visibility="gone"
+        android:background="@drawable/bg_platform_warning_toast"
+        android:elevation="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tv_platform_warning_icon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚠"
+            android:textSize="18sp"
+            android:textColor="@color/warning_text"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_platform_warning_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:textSize="14sp"
+            android:textColor="@color/warning_text"
+            android:lineSpacingExtra="2dp" />
+
+    </LinearLayout>
+
     <!-- ========== 标题 ========== -->
     <TextView
         android:id="@+id/tv_title"
