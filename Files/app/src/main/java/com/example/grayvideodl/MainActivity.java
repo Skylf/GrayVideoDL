@@ -17,6 +17,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -34,6 +35,7 @@ import com.example.grayvideodl.ui.log.LogFragment;
 import com.example.grayvideodl.ui.settings.SettingsFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+import java.io.File;
 import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
@@ -118,6 +120,148 @@ public class MainActivity extends AppCompatActivity {
 
         // 启动初始化检查结果轮询
         pollInitCheckResult();
+
+        // 延迟启动自动检查更新（等待初始化检查结束后再执行）
+        // 延迟 3 秒确保主界面已完全加载，不影响首页渲染和初始化检查
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                autoCheckUpdate();
+            }
+        }, 3000);
+    }
+
+    /*
+     * ==============================================================
+     * 自动检查更新（启动时静默检测）
+     * ==============================================================
+     */
+
+    /*
+     * autoCheckUpdate: 应用启动时自动检查更新
+     * 在 onCreate 中延迟 3 秒调用，确保界面已完全加载后再执行。
+     * 发现新版本时弹窗提示用户，用户可选择立即更新或稍后。
+     * 此方法与 SettingsFragment 中的手动检查共享同一个 UpdateManager 逻辑，
+     * UpdateManager 定义在：
+     * (app/src/main/java/com/example/grayvideodl/UpdateManager.java)
+     */
+    private void autoCheckUpdate() {
+        Log.d("Update", "MainActivity: 启动自动检查更新");
+
+        // 创建 UpdateManager 实例
+        UpdateManager updateManager = new UpdateManager(this);
+
+        /*
+         * 调用 UpdateManager.checkUpdate() 发起异步检查，
+         * 通过代理列表直连 Gitee API 获取最新 Release 信息。
+         */
+        updateManager.checkUpdate(new UpdateManager.UpdateListener() {
+            @Override
+            public void onNewVersionFound(String versionName,
+                                          String releaseNotes,
+                                          String apkUrl) {
+                Log.d("Update", "MainActivity: 自动检查发现新版本 " + versionName);
+                // 在主线程中弹出更新对话框
+                showAutoUpdateDialog(updateManager, versionName,
+                        releaseNotes, apkUrl);
+            }
+
+            @Override
+            public void onNoNewVersion() {
+                // 已是最新版本，不打扰用户
+                Log.d("Update", "MainActivity: 自动检查，已是最新版本");
+            }
+
+            @Override
+            public void onCheckError(String error) {
+                // 检查失败，不打扰用户，仅记录日志
+                Log.w("Update", "MainActivity: 自动检查更新失败: " + error);
+            }
+        });
+    }
+
+    /*
+     * showAutoUpdateDialog: 显示自动发现的更新对话框
+     * @param updateManager UpdateManager 实例（用于后续下载）
+     * @param versionName   新版本号
+     * @param releaseNotes  发布说明
+     * @param apkUrl        APK/ZIP 下载地址
+     */
+    private void showAutoUpdateDialog(UpdateManager updateManager,
+                                      String versionName,
+                                      String releaseNotes,
+                                      String apkUrl) {
+        new AlertDialog.Builder(this)
+                .setTitle("发现新版本 " + versionName)
+                .setMessage("更新日志：\n" +
+                        (releaseNotes != null ? releaseNotes : "暂无更新日志"))
+                .setPositiveButton("立即更新", (d, w) -> {
+                    // 用户点击"立即更新"，开始下载并安装
+                    startAutoDownload(updateManager, apkUrl);
+                })
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    /*
+     * startAutoDownload: 启动更新下载，显示进度对话框
+     * @param updateManager UpdateManager 实例
+     * @param apkUrl        APK/ZIP 下载地址
+     */
+    private void startAutoDownload(UpdateManager updateManager, String apkUrl) {
+        // 创建进度对话框
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("正在下载更新");
+        builder.setMessage("请稍候...");
+        builder.setCancelable(false);
+
+        // 水平进度条
+        ProgressBar progressBar = new ProgressBar(this, null,
+                android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setPadding(48, 16, 48, 16);
+        builder.setView(progressBar);
+
+        AlertDialog progressDialog = builder.create();
+        progressDialog.show();
+
+        /*
+         * 调用 UpdateManager.downloadApk() 异步下载 ZIP 包，
+         * 下载完成后会自动解压、校验并安装 APK。
+         */
+        updateManager.downloadApk(apkUrl, new UpdateManager.DownloadCallback() {
+            @Override
+            public void onProgress(int percent) {
+                if (percent == UpdateManager.DownloadCallback.PROGRESS_UNKNOWN) {
+                    if (!progressBar.isIndeterminate()) {
+                        progressBar.setIndeterminate(true);
+                    }
+                } else {
+                    if (progressBar.isIndeterminate()) {
+                        progressBar.setIndeterminate(false);
+                    }
+                    progressBar.setProgress(percent);
+                }
+            }
+
+            @Override
+            public void onSuccess(File apkFile) {
+                if (progressDialog.isShowing()) {
+                    progressDialog.dismiss();
+                }
+                // 安装 APK
+                updateManager.installApk(apkFile);
+            }
+
+            @Override
+            public void onFailure(String error) {
+                if (progressDialog.isShowing()) {
+                    progressDialog.dismiss();
+                }
+                Toast.makeText(MainActivity.this,
+                        "下载失败：" + error, Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     /*

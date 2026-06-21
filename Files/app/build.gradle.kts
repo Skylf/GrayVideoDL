@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.grayvideodl"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.8B"
+        versionCode = 4
+        versionName = "0.8E"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

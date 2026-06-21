@@ -9,6 +9,12 @@
     <external-path
         name="downloads"
         path="Download/GrayVideoDL/" />
+    <!-- 外部文件目录的 Download 子目录，用于应用内更新安装 APK -->
+    <!-- 路径: /storage/emulated/0/Android/data/com.example.grayvideodl/files/Download/ -->
+    <!-- external-files-path 在部分机型上兼容性优于 cache-path -->
+    <external-files-path
+        name="external_downloads"
+        path="Download/" />
     <!-- 如果文件可能存放在应用私有目录，可用以下路径兜底 -->
     <files-path
         name="internal_files"

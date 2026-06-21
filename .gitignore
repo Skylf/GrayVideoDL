@@ -13,6 +13,7 @@ bin/
 gen/
 out/
 /build/
+release/
 .gradle/
 local.properties
 
@@ -49,7 +50,8 @@ ks-*.txt
 test-video/
 docs/
 yt-dlp*.md
-*更新计划方案*.txt
+*更新计划方案*
+test_api_*.py
 
 ## 项目说明文档 (Excel 二进制文件保留)
 # ProjectDescription 下的 xlsx 文件保留不排除
