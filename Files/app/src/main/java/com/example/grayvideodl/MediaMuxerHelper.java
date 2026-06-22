@@ -129,8 +129,14 @@ public class MediaMuxerHelper {
                     break;
                 }
                 // 设置样本元数据：偏移、大小、时间戳（微秒）、标志
+                // 将 MediaExtractor 的样本标志转换为 MediaCodec.BufferInfo 的标志
+                // MediaExtractor.SAMPLE_FLAG_SYNC → MediaCodec.BUFFER_FLAG_KEY_FRAME
+                int videoFlags = 0;
+                if ((videoExtractor.getSampleFlags() & MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                    videoFlags |= MediaCodec.BUFFER_FLAG_KEY_FRAME;
+                }
                 bufferInfo.set(0, sampleSize, videoExtractor.getSampleTime(),
-                        videoExtractor.getSampleFlags());
+                        videoFlags);
                 // 将样本写入 Muxer 的视频轨道
                 muxer.writeSampleData(muxerVideoTrack, buffer, bufferInfo);
                 videoSampleCount++;
@@ -153,8 +159,13 @@ public class MediaMuxerHelper {
                 if (sampleSize < 0) {
                     break;
                 }
+                // 将音频样本标志从 MediaExtractor 格式转换为 MediaCodec.BufferInfo 格式
+                int audioFlags = 0;
+                if ((audioExtractor.getSampleFlags() & MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                    audioFlags |= MediaCodec.BUFFER_FLAG_KEY_FRAME;
+                }
                 bufferInfo.set(0, sampleSize, audioExtractor.getSampleTime(),
-                        audioExtractor.getSampleFlags());
+                        audioFlags);
                 muxer.writeSampleData(muxerAudioTrack, buffer, bufferInfo);
                 audioSampleCount++;
                 audioExtractor.advance();

@@ -788,7 +788,6 @@ public class HomeFragment extends Fragment {
      * createFormatRow: 创建一个可点击的格式选择行（表格卡片样式）
      * 每行是一个圆角白色卡片，带浅灰边框。
      * 视频行文字色使用 table_text_primary（深灰），大小列使用 table_text_secondary（中灰）。
-     * 音频行背景为暖白底色，便于目视区分。
      * 选中时卡片边框变为蓝色，背景变为浅蓝。
      */
     private View createFormatRow(VideoInfo.Format format) {
@@ -821,10 +820,7 @@ public class HomeFragment extends Fragment {
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
         if (format.isAudioOnly()) {
-            // ===== 音频格式行 =====
-            // 音频行使用暖白背景进行区分
-            card.setCardBackgroundColor(
-                    getResources().getColor(R.color.table_audio_bg));
+            // ===== 音频格式行（背景色与画质解析结果一致） =====
 
             String[] columns = {format.getExt(), format.getAcodec(),
                     format.getFilesizeText()};
@@ -1261,9 +1257,8 @@ public class HomeFragment extends Fragment {
     }
 
     /*
-     * showTestResultDialog: 显示完整环境测试结果模态框
-     * 展示五项环境检查结果：Python、FFmpeg、存储目录、网络、Cookie
-     * 每项单独显示成功/失败状态
+     * showTestResultDialog: 显示环境测试结果对话框
+     * 全部通过时仅显示"环境检查通过"；失败时显示"环境出错"并列出具体失败项
      */
     private void showTestResultDialog(
             boolean pythonOk,
@@ -1271,80 +1266,61 @@ public class HomeFragment extends Fragment {
             boolean storageOk, String storageMsg,
             boolean networkOk, String networkMsg,
             boolean cookieOk, String cookieMsg) {
-        // 构建检测结果文本
-        StringBuilder detailBuilder = new StringBuilder();
-
-        // 1. Python / yt-dlp 检测结果
-        detailBuilder.append(pythonOk ? "✓" : "✗")
-                .append(" Python环境: ")
-                .append(pythonOk ? "正常" : "异常").append("\n");
-
-        // 2. FFmpeg 检测结果
-        detailBuilder.append(ffmpegOk ? "✓" : "✗")
-                .append(" FFmpeg: ")
-                .append(ffmpegOk ? "已就绪" : "未就绪");
-        if (!ffmpegOk) {
-            detailBuilder.append("（分离流视频将无音频）");
-        }
-        detailBuilder.append("\n");
-
-        // 3. 存储目录检测结果
-        detailBuilder.append(storageOk ? "✓" : "✗")
-                .append(" 存储目录: ")
-                .append(storageOk ? "正常" : "异常");
-        if (storageMsg != null && !storageMsg.isEmpty()) {
-            detailBuilder.append("（").append(storageMsg).append("）");
-        }
-        detailBuilder.append("\n");
-
-        // 4. 网络连通性检测结果
-        detailBuilder.append(networkOk ? "✓" : "✗")
-                .append(" 网络连接: ")
-                .append(networkOk ? "正常" : "异常");
-        if (networkMsg != null && !networkMsg.isEmpty()) {
-            detailBuilder.append("（").append(networkMsg).append("）");
-        }
-        detailBuilder.append("\n");
-
-        // 5. Cookie 文件状态检测结果
-        detailBuilder.append(cookieOk ? "✓" : "—")
-                .append(" Cookie配置: ")
-                .append(cookieMsg != null ? cookieMsg : "未知")
-                .append("\n");
-
         // 计算是否全部通过（Cookie 为可选，不计入全部通过条件）
         boolean allCriticalOk = pythonOk && ffmpegOk && storageOk && networkOk;
-        String summary;
-        if (allCriticalOk) {
-            summary = "核心环境一切正常！";
-        } else {
-            summary = "部分环境未就绪，请检查后重试。";
-        }
 
-        // 创建布局：标题 + 详细内容
         LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(40, 28, 40, 20);
 
-        // 标题：总体状态
-        TextView titleView = new TextView(requireContext());
-        titleView.setText(summary);
-        titleView.setTextSize(17);
-        titleView.setTextColor(getResources().getColor(
-                allCriticalOk ? R.color.success_green : R.color.error_text));
-        titleView.setGravity(android.view.Gravity.CENTER);
-        titleView.setPadding(0, 0, 0, 16);
+        if (allCriticalOk) {
+            // 全部通过：仅显示成功标题
+            TextView titleView = new TextView(requireContext());
+            titleView.setText("环境检查通过");
+            titleView.setTextSize(18);
+            titleView.setTextColor(getResources().getColor(R.color.success_green));
+            titleView.setGravity(android.view.Gravity.CENTER);
+            layout.addView(titleView);
+        } else {
+            // 有失败项：显示"环境出错"及具体失败详情
+            TextView titleView = new TextView(requireContext());
+            titleView.setText("环境出错");
+            titleView.setTextSize(18);
+            titleView.setTextColor(getResources().getColor(R.color.error_text));
+            titleView.setGravity(android.view.Gravity.CENTER);
+            titleView.setPadding(0, 0, 0, 16);
+            layout.addView(titleView);
 
-        // 详细内容
-        TextView detailView = new TextView(requireContext());
-        detailView.setText(detailBuilder.toString());
-        detailView.setTextSize(14);
-        detailView.setTextColor(getResources().getColor(
-                allCriticalOk ? R.color.success_green : R.color.error_text));
-        detailView.setGravity(android.view.Gravity.START);
+            // 构建失败详情文本，只列出未通过的项目
+            StringBuilder failBuilder = new StringBuilder();
+            if (!pythonOk) {
+                failBuilder.append("✗ Python环境异常\n");
+            }
+            if (!ffmpegOk) {
+                failBuilder.append("✗ FFmpeg未就绪（分离流视频将无音频）\n");
+            }
+            if (!storageOk) {
+                failBuilder.append("✗ 存储目录异常");
+                if (storageMsg != null && !storageMsg.isEmpty()) {
+                    failBuilder.append("（").append(storageMsg).append("）");
+                }
+                failBuilder.append("\n");
+            }
+            if (!networkOk) {
+                failBuilder.append("✗ 网络连接异常");
+                if (networkMsg != null && !networkMsg.isEmpty()) {
+                    failBuilder.append("（").append(networkMsg).append("）");
+                }
+                failBuilder.append("\n");
+            }
 
-        layout.addView(titleView);
-        layout.addView(detailView);
+            TextView detailView = new TextView(requireContext());
+            detailView.setText(failBuilder.toString().trim());
+            detailView.setTextSize(14);
+            detailView.setTextColor(getResources().getColor(R.color.error_text));
+            detailView.setGravity(android.view.Gravity.START);
+            layout.addView(detailView);
+        }
 
         // 弹出模态框
         new android.app.AlertDialog.Builder(requireContext())

@@ -376,17 +376,16 @@ public class UpdateManager {
         String filePath = apkFile.getAbsolutePath();
         Log.d(TAG, "准备安装 APK: " + filePath + " (大小: " + fileSize + " bytes)");
 
-        // Android 8.0+ 需要检查"允许安装未知来源应用"权限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!context.getPackageManager().canRequestPackageInstalls()) {
-                Log.w(TAG, "未开启未知来源应用安装权限，跳转设置");
-                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
-                intent.setData(Uri.parse("package:" + context.getPackageName()));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(intent);
-                Toast.makeText(context, "请允许安装未知来源应用后再试", Toast.LENGTH_LONG).show();
-                return;
-            }
+        // Android 8.0+（minSdk=29，条件始终满足）检查"允许安装未知来源应用"权限
+        // minSdk=29 >= O(26)，此检查始终执行
+        if (!context.getPackageManager().canRequestPackageInstalls()) {
+            Log.w(TAG, "未开启未知来源应用安装权限，跳转设置");
+            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+            intent.setData(Uri.parse("package:" + context.getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            Toast.makeText(context, "请允许安装未知来源应用后再试", Toast.LENGTH_LONG).show();
+            return;
         }
 
         //
@@ -396,17 +395,11 @@ public class UpdateManager {
         //
         Uri apkUri;
 
-        // Android 7.0+ 需要使用 FileProvider 共享文件
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            // 使用 FileProvider 生成 content:// URI
-            apkUri = FileProvider.getUriForFile(context,
-                    context.getPackageName() + ".fileprovider", apkFile);
-            Log.d(TAG, "FileProvider URI: " + apkUri.toString());
-        } else {
-            // Android 7.0 以下直接使用 file:// URI
-            apkUri = Uri.fromFile(apkFile);
-            Log.d(TAG, "File URI: " + apkUri.toString());
-        }
+        // minSdk=29 >= N(24)，始终使用 FileProvider 共享文件
+        // 使用 FileProvider 生成 content:// URI
+        apkUri = FileProvider.getUriForFile(context,
+                context.getPackageName() + ".fileprovider", apkFile);
+        Log.d(TAG, "FileProvider URI: " + apkUri.toString());
 
         // 使用 ACTION_INSTALL_PACKAGE + EXTRA_RETURN_RESULT
         Intent installIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
@@ -441,14 +434,10 @@ public class UpdateManager {
      */
     public static int getLocalVersionCode(Context context) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                return (int) context.getPackageManager()
-                        .getPackageInfo(context.getPackageName(), 0)
-                        .getLongVersionCode();
-            } else {
-                return context.getPackageManager()
-                        .getPackageInfo(context.getPackageName(), 0).versionCode;
-            }
+            // minSdk=29 >= P(28)，始终使用 getLongVersionCode()
+            return (int) context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0)
+                    .getLongVersionCode();
         } catch (Exception e) {
             Log.e(TAG, "读取版本码失败", e);
             return 0;

@@ -39,6 +39,10 @@ public class DownloadTask {
     private double speed;                  // 下载速度（字节/秒，仅运行时，不持久化）
     private int progress;                  // 下载进度 0-100
 
+    // 自定义状态文本（非空时覆盖 getStatusText() 默认返回值）
+    // 由进度轮询设置合并/下载中的实时提示，状态变更时清除
+    private String customStatusText;
+
     public DownloadTask() {
         this.id = String.valueOf(System.currentTimeMillis());
         this.createTime = System.currentTimeMillis();
@@ -184,8 +188,13 @@ public class DownloadTask {
     /*
      * getStatusText: 获取状态文本描述，用于 UI 展示
      * 下载中显示百分比，已完成/失败/暂停显示对应文字
+     * 优先返回进度轮询设置的自定义状态文本（如"下载完成，正在合并音视频"）
      */
     public String getStatusText() {
+        // 自定义状态文本优先（进度轮询设置的合并/下载提示）
+        if (customStatusText != null && !customStatusText.isEmpty()) {
+            return customStatusText;
+        }
         switch (status) {
             case STATUS_DOWNLOADING:
                 return "下载中 " + progress + "%";
@@ -197,6 +206,15 @@ public class DownloadTask {
             default:
                 return status;
         }
+    }
+
+    /*
+     * setStatusText: 设置自定义状态文本
+     * 用于进度轮询更新下载中/合并中的实时状态描述
+     * @param text 自定义文本，传 null 恢复默认行为
+     */
+    public void setStatusText(String text) {
+        this.customStatusText = text;
     }
 
     /*

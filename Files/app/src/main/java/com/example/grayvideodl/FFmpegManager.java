@@ -17,9 +17,11 @@ import android.os.AsyncTask;
 import android.util.Log;
 
 import java.io.*;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.zip.GZIPInputStream;
+
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 
 /**
  * FFmpeg 管理器
@@ -305,7 +307,7 @@ public class FFmpegManager {
             return;
         }
 
-        currentDownloadTask = new DownloadTask(callback);
+        currentDownloadTask = new DownloadTask(this, callback);
         currentDownloadTask.execute();
     }
 
@@ -423,8 +425,16 @@ public class FFmpegManager {
     /**
      * 异步下载任务（AsyncTask）
      * 从 Khang-NT/ffmpeg-binary-android 下载 arm64-v8a-full FFmpeg 二进制
+     * 
+     * 声明为 static 内部类 + WeakReference 持有外部引用，
+     * 避免 AsyncTask 生命周期长于 Activity 时造成内存泄漏。
      */
-    private class DownloadTask extends AsyncTask<Void, Integer, Boolean> {
+    private static class DownloadTask extends AsyncTask<Void, Integer, Boolean> {
+
+        // 持有 FFmpegManager 的弱引用，防止内存泄漏
+        private WeakReference<FFmpegManager> managerRef;
+        // 持有回调的弱引用（回调通常持有 Activity 引用）
+        private WeakReference<FfmpegDownloadCallback> callbackRef;
 
         // 下载 URL：GitHub release 中的 arm64-v8a-full FFmpeg 二进制
         // 文件为 tar.bz2 格式，约 7.9MB
@@ -437,24 +447,31 @@ public class FFmpegManager {
         // 错误消息
         private String errorMsg = "";
 
-        // 进度回调
-        private FfmpegDownloadCallback callback;
-
-        DownloadTask(FfmpegDownloadCallback callback) {
-            this.callback = callback;
+        DownloadTask(FFmpegManager manager, FfmpegDownloadCallback callback) {
+            managerRef = new WeakReference<>(manager);
+            callbackRef = new WeakReference<>(callback);
         }
 
         @Override
         protected void onPreExecute() {
-            if (callback != null) callback.onProgress("准备下载", 0);
+            FfmpegDownloadCallback cb = callbackRef.get();
+            if (cb != null) cb.onProgress("准备下载", 0);
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
+            // 获取 FFmpegManager 实例，若已被 GC 则终止
+            FFmpegManager manager = managerRef.get();
+            if (manager == null) {
+                errorMsg = "FFmpegManager 已被回收";
+                return false;
+            }
+
             try {
                 // ==================== 阶段1：下载 tar.bz2 ====================
                 publishProgress(0);
-                if (callback != null) callback.onProgress("正在下载 FFmpeg...", 5);
+                FfmpegDownloadCallback cb = callbackRef.get();
+                if (cb != null) cb.onProgress("正在下载 FFmpeg...", 5);
 
                 URL url = new URL(DOWNLOAD_URL);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -466,7 +483,7 @@ public class FFmpegManager {
                 if (responseCode != HttpURLConnection.HTTP_OK) {
                     // 如果 GitHub release 下载失败，尝试备选下载源
                     Log.w(TAG, "主下载源返回 " + responseCode + "，尝试备选源");
-                    return downloadFromFallback();
+                    return downloadFromFallback(manager);
                 }
 
                 // 获取文件总大小
@@ -474,7 +491,7 @@ public class FFmpegManager {
                 Log.d(TAG, "开始下载 FFmpeg，总大小=" + totalSize);
 
                 // 创建临时文件
-                File tempFile = new File(appContext.getCacheDir(), "ffmpeg_download.tar.bz2");
+                File tempFile = new File(manager.appContext.getCacheDir(), "ffmpeg_download.tar.bz2");
                 tempFilePath = tempFile.getAbsolutePath();
 
                 // 流式下载
@@ -496,8 +513,9 @@ public class FFmpegManager {
                             if (percent != lastPercent) {
                                 lastPercent = percent;
                                 publishProgress(percent);
-                                if (callback != null) {
-                                    callback.onProgress("正在下载 FFmpeg...", percent);
+                                cb = callbackRef.get();
+                                if (cb != null) {
+                                    cb.onProgress("正在下载 FFmpeg...", percent);
                                 }
                             }
                         }
@@ -505,10 +523,11 @@ public class FFmpegManager {
                 }
 
                 publishProgress(70);
-                if (callback != null) callback.onProgress("正在解压...", 70);
+                cb = callbackRef.get();
+                if (cb != null) cb.onProgress("正在解压...", 70);
 
                 // ==================== 阶段2：解压 tar.bz2 ====================
-                boolean extractSuccess = extractTarBz2(tempFile, appContext.getFilesDir());
+                boolean extractSuccess = manager.extractTarBz2(tempFile, manager.appContext.getFilesDir());
                 if (!extractSuccess) {
                     errorMsg = "FFmpeg 解压失败";
                     return false;
@@ -518,7 +537,7 @@ public class FFmpegManager {
                 tempFile.delete();
 
                 // ==================== 阶段3：寻找 ffmpeg 二进制 ====================
-                File ffmpegBin = findFfmpegInExtracted(appContext.getFilesDir());
+                File ffmpegBin = manager.findFfmpegInExtracted(manager.appContext.getFilesDir());
                 if (ffmpegBin == null) {
                     errorMsg = "解压后未找到 ffmpeg 可执行文件";
                     return false;
@@ -530,16 +549,17 @@ public class FFmpegManager {
                     Log.w(TAG, "设置 ffmpeg 可执行权限失败（可能为只读文件系统）");
                 }
 
-                ffmpegPath = ffmpegBin.getAbsolutePath();
-                isReady = true;
-                setEnvForPython(ffmpegPath);
+                manager.ffmpegPath = ffmpegBin.getAbsolutePath();
+                manager.isReady = true;
+                manager.setEnvForPython(manager.ffmpegPath);
 
                 publishProgress(100);
-                if (callback != null) callback.onProgress("FFmpeg 就绪", 100);
+                cb = callbackRef.get();
+                if (cb != null) cb.onProgress("FFmpeg 就绪", 100);
 
-                Log.d(TAG, "FFmpeg 下载并部署成功: " + ffmpegPath
+                Log.d(TAG, "FFmpeg 下载并部署成功: " + manager.ffmpegPath
                         + "，大小=" + ffmpegBin.length());
-                Log.i(TAG_FF_MEDIA, "FFmpegManager: FFmpeg 下载并部署成功，路径=" + ffmpegPath
+                Log.i(TAG_FF_MEDIA, "FFmpegManager: FFmpeg 下载并部署成功，路径=" + manager.ffmpegPath
                         + "，大小=" + ffmpegBin.length());
                 return true;
 
@@ -555,7 +575,7 @@ public class FFmpegManager {
          * 备选下载源
          * 当 GitHub 主源不可用时尝试（如中国地区访问 GitHub 不稳定）
          */
-        private boolean downloadFromFallback() {
+        private boolean downloadFromFallback(FFmpegManager manager) {
             // 备选源：尝试直接获取单个 ffmpeg 二进制
             // 目前使用相同的 URL 重试（带更长超时）
             try {
@@ -589,9 +609,15 @@ public class FFmpegManager {
 
         @Override
         protected void onPostExecute(Boolean success) {
-            currentDownloadTask = null;
-            if (callback != null) {
-                callback.onComplete(success, ffmpegPath, success ? "" : errorMsg);
+            FFmpegManager manager = managerRef.get();
+            if (manager != null) {
+                manager.currentDownloadTask = null;
+            }
+            FfmpegDownloadCallback cb = callbackRef.get();
+            if (cb != null) {
+                cb.onComplete(success,
+                        manager != null ? manager.ffmpegPath : "",
+                        success ? "" : errorMsg);
             }
         }
     }
@@ -599,6 +625,9 @@ public class FFmpegManager {
     /**
      * 解压 tar.bz2 文件到目标目录
      * tar.bz2 = bzip2 压缩的 tar 归档
+     * 
+     * 使用 Apache Commons Compress 库的 BZip2CompressorInputStream 进行解压，
+     * 因为 Java 标准库不包含 bzip2 解压器。
      * 
      * @param tarBz2File tar.bz2 文件
      * @param targetDir  解压目标目录
@@ -612,11 +641,9 @@ public class FFmpegManager {
         try (FileInputStream fis = new FileInputStream(tarBz2File);
              BufferedInputStream bis = new BufferedInputStream(fis);
              // 第一层解压：bzip2 → tar 流
-             // 使用 Java 内置的 GZIPInputStream 处理 gzip 压缩
-             // 注意：tar.bz2 是 bzip2 压缩，但 bzip2 需要额外库
-             // 这里使用 GZIPInputStream 处理 .tar.gz 格式，同时兼容 .tar.bz2
-             GZIPInputStream gzis = new GZIPInputStream(bis);
-             BufferedInputStream tarInput = new BufferedInputStream(gzis)) {
+             // 使用 Apache Commons Compress 的 BZip2CompressorInputStream
+             BZip2CompressorInputStream bz2is = new BZip2CompressorInputStream(bis);
+             BufferedInputStream tarInput = new BufferedInputStream(bz2is)) {
 
             // 简易 tar 解压器
             // tar 格式：每 512 字节一个块，文件头 + 文件数据 + 填充
@@ -726,9 +753,8 @@ public class FFmpegManager {
 
             return true;
         } catch (Exception e) {
-            // 如果 gzip 解压失败（因为 .tar.bz2 不是 gzip 格式），
-            // 说明下载的文件可能是非 gzip 压缩格式
-            Log.w(TAG, "GZIP 解压失败，可能不是 gzip 格式: " + e.getMessage());
+            // bzip2 解压失败（可能是文件损坏或非 bzip2 格式）
+            Log.w(TAG, "bzip2 解压失败: " + e.getMessage());
             throw e;
         }
     }

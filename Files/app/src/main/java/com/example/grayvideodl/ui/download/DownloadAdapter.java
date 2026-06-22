@@ -162,6 +162,8 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
                 progressBar.setProgress(task.getProgress());
                 btnCancel.setVisibility(View.VISIBLE);
                 btnCancel.setText("取消");
+                // 隐藏分享按钮（防止 ViewHolder 回收复用导致按钮残留）
+                btnShare.setVisibility(View.GONE);
                 // 设置下载速度和已下载/总大小
                 setSpeedSizeText(task);
                 tvStatus.setTextColor(
@@ -188,7 +190,10 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
                         itemView.getContext().getColor(
                                 android.R.color.holo_red_dark));
             } else {
-                // 其他状态（如暂停等）：隐藏分享按钮
+                // 其他状态（如暂停等）：隐藏所有操作按钮和进度条
+                progressBar.setVisibility(View.GONE);
+                tvSpeedSize.setVisibility(View.GONE);
+                btnCancel.setVisibility(View.GONE);
                 btnShare.setVisibility(View.GONE);
             }
 
@@ -222,20 +227,25 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.ViewHo
                 }
             });
 
-            // 设置下载路径显示
+            // 设置下载路径显示（仅下载合并完成后才显示打开按钮）
             String pathDisplay = task.getDownloadPathDisplay();
-            if (pathDisplay != null && !pathDisplay.isEmpty()) {
+            if (DownloadTask.STATUS_COMPLETED.equals(status)
+                    && pathDisplay != null && !pathDisplay.isEmpty()) {
                 tvDownloadPath.setText(pathDisplay);
                 layoutDownloadPath.setVisibility(View.VISIBLE);
-                // 打开文件夹点击事件
-                layoutDownloadPath.setOnClickListener(new View.OnClickListener() {
+
+                // 为整个路径区域和"打开"按钮分别设置点击事件
+                // 注意：tvOpenFolder 是 MaterialButton，会拦截点击不传播到父布局
+                View.OnClickListener openListener = new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         if (listener != null) {
                             listener.onOpenFolder(task);
                         }
                     }
-                });
+                };
+                layoutDownloadPath.setOnClickListener(openListener);
+                tvOpenFolder.setOnClickListener(openListener);
             } else {
                 layoutDownloadPath.setVisibility(View.GONE);
             }

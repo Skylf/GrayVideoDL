@@ -301,10 +301,18 @@ public class MainActivity extends AppCompatActivity {
 
     /*
      * pollInitCheckResult: 轮询等待初始化检查结果
-     * 先显示加载对话框（含转圈动画），再轮询检查结果。
-     * 检查就绪后随机延迟 1~3 秒再展示结果对话框，提升用户体验。
+     * 先判断是否有待展示的检查结果：
+     *   - 首次运行：后台检查中，显示加载对话框等待结果
+     *   - 后续运行：检查已完成且无待展示结果，直接跳过
+     * 检查就绪后展示结果对话框。
      */
     private void pollInitCheckResult() {
+        // 检查已标记完成但无结果（非首次运行，无需展示对话框），直接跳过
+        if (GrayVideoDLApp.isCheckCompleted()
+                && GrayVideoDLApp.getCheckResult() == null) {
+            return;
+        }
+
         // 立即显示加载对话框
         showInitCheckLoadingDialog();
 
@@ -412,13 +420,13 @@ public class MainActivity extends AppCompatActivity {
         if (result.all_success) {
             tvIcon.setText("✓");
             tvIcon.setBackgroundResource(R.drawable.circle_bg_green); // 绿色背景 — 成功
-            tvTitle.setText("Python环境初始化成功");
-            tvDetail.setText("所有环境检查已通过，程序可正常使用。");
+            tvTitle.setText("初始化成功");
+            tvDetail.setVisibility(View.GONE);
         } else {
             tvIcon.setText("✗");
             tvIcon.setBackgroundResource(R.drawable.circle_bg_red); // 红色背景 — 失败
-            tvTitle.setText("环境初始化完成");
-            tvDetail.setText("部分环境未就绪，但不影响主体功能使用。");
+            tvTitle.setText("初始化失败");
+            tvDetail.setVisibility(View.GONE);
         }
 
         // 创建 AlertDialog 并设置为模态

@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.grayvideodl"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.8E"
+        versionCode = 5
+        versionName = "0.9A"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.activity)
     implementation(libs.constraintlayout)
+    implementation(libs.commons.compress)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

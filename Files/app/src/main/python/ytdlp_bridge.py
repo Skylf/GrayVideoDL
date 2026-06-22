@@ -445,8 +445,12 @@ def downloadVideoWithProgress(url, formatId, outputDir, cookieFile=None, progres
         ffmpeg_ok = check_ffmpeg_available()
         log_merge(MERGE_PHASE_BEFORE, f"FFmpeg可用: {ffmpeg_ok}")
         
+        # 标记是否已写入合并状态，避免重复写入
+        merge_status_written = False
+        
         # 进度钩子
         def progress_hook(d):
+            nonlocal merge_status_written
             status = d.get('status', '')
             if status == 'downloading':
                 downloaded_bytes = d.get('downloaded_bytes', 0)
@@ -480,6 +484,20 @@ def downloadVideoWithProgress(url, formatId, outputDir, cookieFile=None, progres
                     raise Exception('下载已取消')
             elif status == 'finished':
                 log_merge(MERGE_PHASE_DOWNLOAD, f"下载阶段完成，文件: {d.get('filename', '未知')}")
+                # 下载完成，即将开始合并，写入"merging"状态通知 Java 层更新提示
+                if not merge_status_written and progressFile:
+                    try:
+                        merge_data = {
+                            'status': 'merging',
+                            'percent': 100,
+                            'message': '正在合并音视频...'
+                        }
+                        with open(progressFile, 'w') as f:
+                            f.write(json.dumps(merge_data))
+                        merge_status_written = True
+                        log_merge(MERGE_PHASE_DOWNLOAD, "已写入合并状态到进度文件")
+                    except Exception as e:
+                        log_e(f"写入合并状态到进度文件失败: {e}")
         
         # ==============================
         # 阶段2：音视频合并后处理器回调
@@ -493,6 +511,18 @@ def downloadVideoWithProgress(url, formatId, outputDir, cookieFile=None, progres
             if status == 'started':
                 log_merge(MERGE_PHASE_PROCESSOR, f"后处理器开始执行: {postprocessor}")
                 log_merge(MERGE_PHASE_PROCESSOR, f"后处理器参数: {d}")
+                # 当合并相关后处理器开始时，写"正在合并"状态到进度文件，通知 Java 层更新提示
+                if progressFile and ('Merger' in postprocessor or 'Convertor' in postprocessor or 'FFmpeg' in postprocessor):
+                    try:
+                        merge_data = {
+                            'status': 'merging',
+                            'percent': 100,
+                            'message': '正在合并音视频...'
+                        }
+                        with open(progressFile, 'w') as f:
+                            f.write(json.dumps(merge_data))
+                    except Exception as e:
+                        log_e(f"写入合并状态到进度文件失败: {e}")
             elif status == 'processing':
                 log_merge(MERGE_PHASE_PROCESSOR, f"后处理器执行中: {postprocessor}, 信息: {d}")
             elif status == 'finished':
@@ -722,6 +752,19 @@ def downloadVideoWithProgress(url, formatId, outputDir, cookieFile=None, progres
         # ==============================
         if use_media_muxer and filename and os.path.exists(filename):
             log_merge(MERGE_PHASE_DOWNLOAD, "=== MediaMuxer 音视频合并 ===")
+            
+            # 写入"正在合并"状态到进度文件，通知 Java 层更新提示
+            if progressFile:
+                try:
+                    merge_data = {
+                        'status': 'merging',
+                        'percent': 100,
+                        'message': '正在合并音视频...'
+                    }
+                    with open(progressFile, 'w') as f:
+                        f.write(json.dumps(merge_data))
+                except Exception as e:
+                    log_e(f"写入合并状态到进度文件失败: {e}")
             
             # 获取视频文件路径（刚下载完成）
             video_path = filename

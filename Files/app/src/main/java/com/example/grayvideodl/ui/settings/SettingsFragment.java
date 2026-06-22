@@ -89,14 +89,14 @@ public class SettingsFragment extends Fragment {
         tvQuality.setText(
                 sharedPreferences.getString(KEY_DEFAULT_QUALITY, "自动"));
         // 通过 PackageManager 运行时读取版本号，避免依赖 Gradle 编译期生成的 BuildConfig
-        String versionName = "0.8C"; // 兜底默认值
+        String versionName = "0.9A"; // 兜底默认值
         try {
             versionName = requireContext().getPackageManager()
                     .getPackageInfo(requireContext().getPackageName(), 0).versionName;
         } catch (Exception e) {
             Log.w(TAG, "读取版本号失败", e);
         }
-        tvVersion.setText("v" + (versionName != null ? versionName : "0.8C"));
+        tvVersion.setText("v" + (versionName != null ? versionName : "0.9A"));
         updateBiliLoginStatus();
     }
 

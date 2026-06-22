@@ -311,9 +311,8 @@ public class DownloadFragment extends Fragment
             }
 
             if (hasActiveTasks) {
-                // 仅刷新UI显示，不重新加载文件（避免覆盖内存中的实时进度数据）
-                adapter.notifyDataSetChanged();
-                // 继续定时刷新
+                // 不需要调用 notifyDataSetChanged，progressPolling 已通过 notifyItemChanged 实时更新 UI
+                // 此处仅维持定时器，继续下一轮检查
                 mainHandler.postDelayed(this, 1000);
             } else {
                 // 没有活动任务，停止自动刷新
@@ -639,23 +638,22 @@ public class DownloadFragment extends Fragment
                 // 某些 Android 版本不支持 file URI 方式，继续尝试
             }
 
-            // ---- 第四步：Android 5+ DocumentsContract 方案（备用） ----
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                try {
-                    android.net.Uri treeUri = android.provider.DocumentsContract
-                            .buildTreeDocumentUri(
-                                    "com.android.externalstorage.documents",
-                                    "primary:Download/GrayVideoDL");
-                    Intent docIntent = new Intent(Intent.ACTION_VIEW);
-                    docIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    docIntent.setDataAndType(treeUri,
-                            "vnd.android.document/directory");
-                    startActivity(docIntent);
-                    Log.d(TAG, "openFolder: DocumentsContract 成功");
-                    return;
-                } catch (Exception ignored2) {
-                    // 尝试失败，提示用户手动查找
-                }
+            // ---- 第四步：DocumentsContract 方案（备用） ----
+            // minSdk=29 >= LOLLIPOP(21)，此分支始终执行
+            try {
+                android.net.Uri treeUri = android.provider.DocumentsContract
+                        .buildTreeDocumentUri(
+                                "com.android.externalstorage.documents",
+                                "primary:Download/GrayVideoDL");
+                Intent docIntent = new Intent(Intent.ACTION_VIEW);
+                docIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                docIntent.setDataAndType(treeUri,
+                        "vnd.android.document/directory");
+                startActivity(docIntent);
+                Log.d(TAG, "openFolder: DocumentsContract 成功");
+                return;
+            } catch (Exception ignored2) {
+                // 尝试失败，提示用户手动查找
             }
 
             // ---- 所有方式都失败 ----
@@ -676,13 +674,12 @@ public class DownloadFragment extends Fragment
     private void scanMediaStore(File folder) {
         try {
             // 扫描文件夹本身（触发重新索引目录下所有文件）
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
-                android.media.MediaScannerConnection.scanFile(
-                        requireContext(),
-                        new String[]{folder.getAbsolutePath()},
-                        null,
-                        null);
-            }
+            // minSdk=29 >= KITKAT(19)，MediaScannerConnection.scanFile 始终可用
+            android.media.MediaScannerConnection.scanFile(
+                    requireContext(),
+                    new String[]{folder.getAbsolutePath()},
+                    null,
+                    null);
             
             // 额外扫描文件夹下所有现有文件
             File[] files = folder.listFiles();
@@ -691,13 +688,11 @@ public class DownloadFragment extends Fragment
                 for (int i = 0; i < files.length; i++) {
                     paths[i] = files[i].getAbsolutePath();
                 }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
-                    android.media.MediaScannerConnection.scanFile(
-                            requireContext(),
-                            paths,
-                            null,
-                            null);
-                }
+                android.media.MediaScannerConnection.scanFile(
+                        requireContext(),
+                        paths,
+                        null,
+                        null);
             }
             
             Log.d(TAG, "scanMediaStore: 触发扫描完成，folder=" + folder.getAbsolutePath());
@@ -838,6 +833,8 @@ public class DownloadFragment extends Fragment
                         // 下载成功
                         taskList.get(idx).setStatus(
                                 DownloadTask.STATUS_COMPLETED);
+                        // 清除自定义状态文本，恢复默认"已完成"
+                        taskList.get(idx).setStatusText(null);
                         String filepath = result.optString("filepath", "");
                         taskList.get(idx).setProgress(100);
 
@@ -880,11 +877,19 @@ public class DownloadFragment extends Fragment
                             taskList.get(idx).setFilepath(filepath);
                         }
 
+                        // 下载合并完成，提示最终文件路径
+                        String finalPath = taskList.get(idx).getFilepath();
+                        if (finalPath != null && !finalPath.isEmpty()) {
+                            Toast.makeText(ctx, "下载完成，下载路径：" + finalPath, Toast.LENGTH_LONG).show();
+                        }
+
                     } else if ("paused".equals(status)) {
                         // 用户取消下载
                         taskList.get(idx).setStatus(
                                 DownloadTask.STATUS_FAILED);
                         taskList.get(idx).setError("已取消");
+                        // 清除自定义状态文本，恢复默认"失败: 已取消"
+                        taskList.get(idx).setStatusText(null);
                         Log.i(TAG_FF_MEDIA, "Download: 下载已被用户取消");
 
                     } else {
@@ -893,6 +898,8 @@ public class DownloadFragment extends Fragment
                                 DownloadTask.STATUS_FAILED);
                         taskList.get(idx).setError(
                                 result.optString("error", "未知错误"));
+                        // 清除自定义状态文本，恢复默认"失败: ..."
+                        taskList.get(idx).setStatusText(null);
                         Log.e(TAG_FF_MEDIA, "Download: 下载失败，error="
                                 + result.optString("error", "未知错误"));
                     }
@@ -1003,11 +1010,19 @@ public class DownloadFragment extends Fragment
                                         etaText = formatEta(eta);
                                     }
 
-                                    // 更新状态文本（百分比 + 剩余时间）
-                                    String statusText = "下载中 " + percent + "%";
-                                    if (!etaText.isEmpty()) {
-                                        statusText += " · 剩余" + etaText;
+                                    // 更新状态文本（下载中/合并中）
+                                    String statusText;
+                                    if ("merging".equals(progStatus)) {
+                                        // 下载完成，正在合并音视频
+                                        statusText = "下载完成，正在合并音视频";
+                                    } else {
+                                        statusText = "下载中 " + percent + "%";
+                                        if (!etaText.isEmpty()) {
+                                            statusText += " · 剩余" + etaText;
+                                        }
                                     }
+                                    // 将自定义状态文本设置到任务对象，适配器 bind 时读取
+                                    taskList.get(idx).setStatusText(statusText);
                                     // 适配器会重新绑定数据，速度+大小由 tv_speed_size 显示
                                     adapter.notifyItemChanged(idx);
                                     Log.d(TAG, "startProgressPolling: UI更新完成，taskId=" + task.getId()
